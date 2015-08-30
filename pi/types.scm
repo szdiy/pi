@@ -17,57 +17,55 @@
 (define-module (pi types) 
   #:use-module (pi env)
   #:use-module ((rnrs) #:select (define-record-type))
-  #:export (make-var
-            var-val
-            var-type
+  #:use-module (srfi srfi-1)
+  #:export (constant
             make-constant
             constant-val
             constant-type
-            gen-uniq-constant
-            gen-integer
-            gen-char
-            is-integer?
-            is-boolean?
-            is-char?
-            is-immediate?
-            integer-check))
+            detect-literal-type
+            gen-constant
+            is-integer-node?
+            is-boolean-node?
+            is-char-node?
+            is-immediate-node?
+            integer-check
+            pred-constant
+            is-immediate?))
 
-(define-record-type var (fields val type)) ; NOTE: var is immutable
-(define-record-type constant (parent var))
+(define-record-type constant (fields val type))
 
-;; could be optimized later, let it be now.
-(define *uniq-constant-list*
-  `((unspecified . ,(make-constant 'unspecified 'special))
-    (true . ,(make-constant 'true 'boolean))
-    (false . ,(make-constant 'false 'boolean))))
-
-(define (gen-uniq-constant what)
-  (or (assoc-ref *uniq-constant-list* what)
-      (throw 'pi-error "BUG: Invalid constant " what)))
+(define (detect-literal-type x)
+  (cond
+   ((symbol? x) 'symbol)
+   ((char? x) 'char)
+   ((integer? x) 'integer)
+   ((string? x) 'string)
+   ((boolean? x) 'boolean)
+   ((pair? x) 'pair)
+   ((list? x) 'list)
+   ((vector? x) 'vector)
+   ((unspecified? x) 'special)
+   (else (throw 'pi-error "Invalid literal type!" x))))
 
 ;; FIXME: char should be uniq in global
-(define (gen-char c) (make-constant c 'char))
-(define (gen-integer i) (make-constant i 'integer))
-(define (gen-string s) (make-constant s 'string))
-(define (gen-boolean b) (gen-uniq-constant b))
-(define (gen-pair p) (make-constant p 'pair))
-(define (gen-list l) (make-constant l 'list))
-(define (gen-vector v) (make-constant v 'vector))
-(define (gen-unspecified) (gen-uniq-constant 'unspecified))
+(define (gen-constant x)
+  (let ((type (detect-literal-type x)))
+    (make-constant x type)))
 
 (define (pred-constant x type)
   (and (constant? x) (eq? (constant-type x) type)))
 
-(define (is-boolean? x) (pred-constant x 'boolean))
-(define (is-char? x) (pred-constant x 'char))
-(define (is-integer? x) (pred-constant x 'integer))
+(define (is-boolean-node? x) (pred-constant x 'boolean))
+(define (is-char-node? x) (pred-constant x 'char))
+(define (is-integer-node? x) (pred-constant x 'integer))
 
 ;; NOTE: not all constant are immediate, e.g, strings are constant
 ;;       but not immediate.
-(define *immediate-types* '(integer char boolean))
-(define (is-immediate? x)
+(define *immediate-type-nodes*
+  '(integer char boolean pair list string vector))
+(define (is-immediate-node? x)
   (and (constant? x)
-       (memq (constant-type x) *immediate-types*)))
+       (memq (constant-type x) *immediate-type-nodes*)))
 
 (define *integer-range*
   '((u8 . (0 . 255))
@@ -82,3 +80,9 @@
       (let ((range (assoc-ref *integer-range* x)))
         (and (> x (car range)) (< x (cdr range))))
       (throw 'pi-error (format #f "'~a' is not an integer!" x))))
+
+(define *immediates*
+  (list integer? string? char? boolean? pair? list? vector?))
+
+(define (is-immediate? x)
+  (any (lambda (c) (c x)) *immediates*))
