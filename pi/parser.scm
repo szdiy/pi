@@ -17,49 +17,27 @@
 (define-module (pi parser)
   #:use-module (pi env)
   #:use-module (pi ast)
+  #:use-module (pi types)
   #:use-module (pi utils)
   #:use-module (pi primitives)
   #:use-module (ice-9 match)
-  #:use-module (srfi srfi-1)
-  #:export (parser))
+  #:export (parser ast->src))
 
 ;; NOTE: we don't allow primitives-redefine, so this list is for checking.
 (define *wrong-op-lst*
   '(quote quasiquote unquote unquote-splicing lambda if set!
           cond and or case let let* letrec begin do define delay))
 
-(define *immediates*
-  (list integer? string? char? boolean?))
-
-(define (is-immediate? x)
-  (any (lambda (c) (c x)) *immediates*))
-
-(define (immediate-type x)
-  (cond
-   ((integer? x) 'integer)
-   ((string? x) 'string)
-   ((char? x) 'char)
-   ((boolean? x) 'boolean)
-   (else #f)))
-
 ;; NOTE: we don't support forward-reference, although I'm willing to...
 (define* (parse-it expr env #:key (top? #f) (body-begin? #f) (use 'test) (op? #f))
   (match expr
-    ((? is-immediate? i) (ast-constant (immediate-type i) i))
-    ((? symbol? k)
-     (let ((v (binding-ref env k)))
-       ;; TODO: v shouldn't be #f, it'll be created at top-level for forward-reference
-       (cond
-        (v (make-ref v))
-        ((is-primitive? k) => identity)
-        (else (throw 'pi-error (format #f "~a: unbound variable!" k))))))
     (('define pattern e ...)
      (cond
       ((null? e)
        ;; R6Rs supports definition without expression, which implies to define
        ;; a var with the value `unspecifed'.
        ;; With respect to the future Scheme, we support it anyway.
-       (ast-constant 'special 'unspecified))
+       (gen-constant 'unspecified))
       ((and (not top?) (not body-begin?))
        ;; According to R5Rs, there're only two situations to use `define':
        ;; 1. In the top-level (toplevel definition).
@@ -67,14 +45,12 @@
        (throw 'pi-error "definition in expression context, where definitions are not allowed, in form " expr))
       (else
        (match pattern
-         ((? symbol? v) (make-assign (parse-it e env #:body-begin? #t) v))
-         (((? symbol? v) args ...) (make-assign (parse-it `(lambda ,args ,@e) env #:body-begin? #t) v))
+         ((? symbol? v) (make-def (parse-it (car e) env #:body-begin? #t) v))
+         (((? symbol? v) args ...) (make-def (parse-it `(lambda ,args ,@e) env #:body-begin? #t) v))
          (else (throw 'pi-error "define: no pattern to match!" expr))))))
-    (('set! id val ...)
+    (('set! id val)
      (let ((var (binding-ref id env)))
        (cond
-        ((null? val)
-         (throw 'pi-error "bad set! in form " expr))
         ((var? var)
          (make-assign (parse-it val env) var))
         (else (throw 'pi-error "not an identifier: " var)))))
@@ -85,7 +61,7 @@
                   (()
                    ;; for (if #f e) situation, this expr should return `unspecified',
                    ;; so we generate `unspecified' here for later use.
-                   (ast-constant 'special 'unspecified))
+                   (gen-constant 'unspecified))
                   ((e) (parse-it e env #:body-begin? #t))
                   ((e redundant ...)
                    (throw 'pi-error "if: redundant expr follow the second branch!" expr))
@@ -138,9 +114,9 @@
                             ,(dispatch (cdr kk) (cdr vv))))))))
               (parse-it (dispatch ks vs) env)))
     (('let ((ks vs) ...) body ...) ; common let
-     (parse-it `((lambda ,@ks ,@body) ,vs) env))
+     (parse-it `((lambda ,ks ,@body) ,vs) env))
     (('let id ((ks vs) ...) body ...) ; named let
-     (parse-it `(letrec ((,id (lambda (,@ks) ,@body))) (,id ,@vs)) env))
+     (parse-it `(letrec ((,id (lambda ,@ks ,@body))) (,id ,@vs)) env))
     (('let () body ...)
      (parse-it `(begin ,@body) env))
     (('let* () body ...)
@@ -156,7 +132,7 @@
     (('or rest ...)
      (let ((tmpvar (gensym "or.tmp.var-")))
        (cond
-        ((null? rest) (ast-constant 'boolean 'false))
+        ((null? rest) (gen-constant 'false))
         ((null? (cdr rest)) (parse-it (car rest) env))
         (else
          (let ((b1 (tmpvar))
@@ -167,7 +143,7 @@
     (('and rest ...)
      (let ((tmpvar (gensym "and.tmp.var-")))
        (cond
-        ((null? rest) (ast-constant 'boolean 'true))
+        ((null? rest) (gen-constant 'true))
         ((null? (cdr rest)) (parse-it (car rest) env))
         (else
          (let ((b1 (tmpvar))
@@ -178,14 +154,24 @@
     ((op args ...)
      (cond
       ((is-primitive? op)
-       => (lambda (prim)
-            (make-prim (map (lambda (e) (parse-it e env)) args) prim)))
+       => (lambda (p)
+            (make-pcall p (map (lambda (e) (parse-it e env #:use 'value)) args))))
       (else
        (let ((f (parse-it op env #:use 'value #:op? #t)))
          (cond
           ((not f) (throw 'pi-error (format #f "PROC `~a': unbound variable: " op)))
           ((macro? f) ((macro-expander f) args env))
           (else (make-call f (map (lambda (e) (parse-it e env #:use 'value)) args))))))))
+    ;; TODO: add quote/unquote/quansiquote...
+    ((? symbol? k)
+     (let ((v (binding-ref env k)))
+       ;; TODO: v shouldn't be #f, it'll be created at top-level for forward-reference
+       (cond
+        (v (make-ref k))
+        ((is-primitive? k) => identity)
+        (else (throw 'pi-error (format #f "~a: unbound variable!" k))))))
+    ;; NOTE: immediate check has to be the last one!!!
+    ((? is-immediate? i) (gen-constant i))
     (else
      (throw 'pi-error
             (format #f
@@ -196,3 +182,20 @@
   (catch 'pi-error
          (lambda () (parse-it expr *top-level* #:top? #t))
          (lambda (k . e) (format #t "PI Compile error: ~{~a~^ ~}~%" e))))
+
+(define (ast->src node)
+  (match node
+    (($ constant _ val type) (unless (eq? 'unspecified type) val))
+    (($ def ($ ast _ subx) v) `(define ,(ast->src v) ,(ast->src subx)))
+    (($ ref _ v) (ast->src v))
+    (($ assign ($ ast _ subx) v) `(set! ,(ast->src v) ,(ast->src subx)))
+    (($ cnd ($ ast _ subx))
+     (match subx
+       ((c b1 b2) `(if ,(ast->src c) ,(ast->src b1) ,(ast->src b2)))
+       (else (throw 'pi-error "I don't know what's wrong dude!!!" subx))))
+    (($ pcall _ op args) `(,(prim-name op) ,@(map ast->src args)))
+    (($ call _ op args) `(,(ast->src op) ,@(map ast->src args)))
+    (($ lam ($ ast _ subx) params _) `(lambda ,(map ast->src params) ,(ast->src subx)))
+    (($ seq ($ ast _ subx)) `(begin ,@(map ast->src subx)))
+    (($ var ($ binding _ id) uid _) id)
+    (else node)))
