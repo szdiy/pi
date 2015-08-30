@@ -17,55 +17,52 @@
 (define-module (pi ast)
   #:use-module (pi utils)
   #:use-module ((rnrs) #:select (define-record-type))
-  #:export (make-ast ast?
+  #:export (ast make-ast ast?
             ast-subx
-
-            make-lit lit?
-            lit-val
             
-            make-ref ref?
+            def make-def def?
+            def-var
+
+            ref make-ref ref?
             ref-var
 
-            make-assign assign?
+            assign make-assign assign?
             assign-var
             
-            make-cnd cnd?
-            
-            make-prim prim?
-            prim-op
+            cnd make-cnd cnd?
 
-            make-call call?
+            pcall make-pcall pcall?
+            pcall-op pcall-args
+
+            call make-call call?
+            call-op call-args
             
-            make-lam lam?
+            lam make-lam lam?
             lam-params lam-has-opt?
 
-            make-seq seq?
+            seq make-seq seq?
 
-            make-binding binding?
+            binding make-binding binding?
             binding-id
             
-            make-var var?
+            var make-var var?
             var-uid var-global?
             new-var
 
             ->special-form
 
-            make-ast-type ast-type?
-            ast-type-type ast-type-val
-
-            ast-constant
             macro-expander))
 
 ;; AST type
 (define-record-type ast (fields subx))
 
-(define-record-type lit (parent ast) (fields val)) ; literal
 (define-record-type ref (parent ast) (fields var)) ; var ref
+(define-record-type def (parent ast) (fields var)) ; var define
 (define-record-type assign (parent ast) (fields var)) ; var assignment
 (define-record-type cnd (parent ast))              ; condition
-(define-record-type prim (parent ast) (fields op)) ; primitive
+(define-record-type pcall (parent ast) (fields op args)) ; prim-call 
 ;; calling a function, ast is a list: (func args ...)
-(define-record-type call (parent ast))
+(define-record-type call (parent ast) (fields op args))
 (define-record-type lam (parent ast) (fields params has-opt?))  ; lambda
 (define-record-type seq (parent ast))              ; sequence
 (define-record-type macro (parent ast) (fields expander))
@@ -80,11 +77,6 @@
 ;; cond begin do and or let-syntax letrec-syntax delay
 ;; And macros!
 (define-record-type special-form (parent binding) (fields expander))
-
-(define-record-type ast-type (fields type val))
-
-(define (ast-constant type val)
-  (make-ast-type type val))
 
 (define (macro-expander m)
   #t)
