@@ -17,7 +17,12 @@
 (define-module (pi primitives)
   #:use-module (pi sasm)
   #:use-module (ice-9 match)
-  #:export (is-primitive?))
+  #:use-module ((rnrs) #:select (define-record-type))
+  #:export (make-prim prim?
+            prim-name prim-label prim-proc
+            is-primitive?))
+
+(define-record-type prim (fields name label proc)) ; primitive
 
 (define (caller-save x) #t)
 (define (callee-save x) #t)
@@ -47,16 +52,21 @@
    #f "__prim_add"
    (%%add args)))
 
+(define (%%sub args)
+  (apply + args))
+(define (%sub . args)
+  (emit-prim-template
+   #f "__prim_add"
+   (%%add args)))
+
 (define *primitives*
-  `((add1 "__prim_add1" ,%add1)
-    (sub1 "__prim_sub1" ,%sub1)
-    (+    "__prim_add"  ,%add)
+  `((1+ . ,(make-prim '1+ "__prim_add1" %add1))
+    (1- . ,(make-prim '1- "__prim_sub1" %sub1))
+    (+  . ,(make-prim '+ "__prim_add"  %add))
+    (-  . ,(make-prim '- "__prim_sub"  %sub))
     ))
 
-(define (is-primitive? op)
-  (match (assoc-ref *primitives* op)
-    ((label func) func)
-    (else #f)))     
+(define (is-primitive? op) (assoc-ref *primitives* op))
 
 (define (get-prim op)
   (or (and=> (assq-ref *primitives* op) caddr)
