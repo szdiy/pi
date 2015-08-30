@@ -39,7 +39,9 @@
 (define (new-env . params)
   (let ((bindings (make-hash-table)))
     (for-each (lambda (v)
-                (hash-set! bindings (binding-id v) (ast-constant 'special 'unspecifed)))
+                ;; NOTE: since each registered param will be guarrented to set a value,
+                ;;       so it's fine we set a special sign 'registered here for debug.
+                (hash-set! bindings (binding-id v) (gen-constant 'registered)))
               params)
     (make-env #f bindings)))
 
