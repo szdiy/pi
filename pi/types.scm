@@ -39,6 +39,7 @@
    ((symbol? x) 'symbol)
    ((char? x) 'char)
    ((integer? x) 'integer)
+   ;; TODO: support real number
    ((string? x) 'string)
    ((boolean? x) 'boolean)
    ((pair? x) 'pair)
