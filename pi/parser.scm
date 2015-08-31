@@ -49,11 +49,9 @@
          (((? symbol? v) args ...) (make-def (parse-it `(lambda ,args ,@e) env #:body-begin? #t) v))
          (else (throw 'pi-error "define: no pattern to match!" expr))))))
     (('set! id val)
-     (let ((var (binding-ref id env)))
-       (cond
-        ((var? var)
-         (make-assign (parse-it val env) var))
-        (else (throw 'pi-error "not an identifier: " var)))))
+     (cond
+      ((symbol? id) (make-assign (parse-it val env) (parse-it id env)))
+      (else (throw 'pi-error (format #f "Bad `set!' special form: ~a" expr)))))
     (('if tst then els ...)
      (let* ((e (parse-it tst env #:use 'test))
             (b1 (parse-it then env #:body-begin? #t))
@@ -98,7 +96,7 @@
     (('begin body ...)
      (let lp((next body) (p #t) (ret '()))
        (cond
-        ((null? next) (make-seq (reverse ret)))
+        ((null? next) (make-seq (reverse! ret)))
         (else
          (match (car next)
            (('define whatever ...) ; make sure inner definitions are available in a row
@@ -114,7 +112,7 @@
                             ,(dispatch (cdr kk) (cdr vv))))))))
               (parse-it (dispatch ks vs) env)))
     (('let ((ks vs) ...) body ...) ; common let
-     (parse-it `((lambda ,ks ,@body) ,vs) env))
+     (parse-it `((lambda ,ks ,@body) ,@vs) env))
     (('let id ((ks vs) ...) body ...) ; named let
      (parse-it `(letrec ((,id (lambda ,@ks ,@body))) (,id ,@vs)) env))
     (('let () body ...)
@@ -169,7 +167,7 @@
        (cond
         (v (make-ref k))
         ((is-primitive? k) => identity)
-        (else (throw 'pi-error (format #f "~a: unbound variable!" k))))))
+        (else (throw 'pi-error (format #f "`~a': unbound variable!" k))))))
     ;; NOTE: immediate check has to be the last one!!!
     ((? is-immediate? i) (gen-constant i))
     (else
@@ -179,9 +177,7 @@
                     expr)))))
 
 (define (parser expr)
-  (catch 'pi-error
-         (lambda () (parse-it expr *top-level* #:top? #t))
-         (lambda (k . e) (format #t "PI Compile error: ~{~a~^ ~}~%" e))))
+  (parse-it expr *top-level* #:top? #t))
 
 (define (ast->src node)
   (match node
