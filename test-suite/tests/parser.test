@@ -1,0 +1,68 @@
+;;  Pi parser test
+;;  -*-  indent-tabs-mode:nil; coding: utf-8 -*-
+;;  Copyright (C) 2015
+;;      "Mu Lei" known as "NalaGinrut" <NalaGinrut@gmail.com>
+;;  This file is free software: you can redistribute it and/or modify
+;;  it under the terms of the GNU General Public License as published by
+;;  the Free Software Foundation, either version 3 of the License, or
+;;  (at your option) any later version.
+
+;;  This file is distributed in the hope that it will be useful,
+;;  but WITHOUT ANY WARRANTY; without even the implied warranty of
+;;  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;;  GNU General Public License for more details.
+
+;;  You should have received a copy of the GNU General Public License
+;;  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+(define-module (test parser)
+  #:use-module (ice-9 match)
+  #:use-module (ice-9 format)
+  #:use-module (srfi srfi-1)
+  #:use-module (pi parser)
+  #:use-module (test-suite lib))
+
+(define-syntax-rule (pick-out a b)
+  (for-each 
+   (lambda (x y)
+     (format #t "~a~t===~t~a~t -> ~a~%" x y (equal? x y)))
+   a b))
+
+;; TODO: add more cases
+(define *parser-tests*
+  `((123 . 123)
+    ("asdf" . "asdf")
+    (#t . #t)
+    (#f . #f)
+    ((if #t 1 2) . (if #t 1 2))
+    ((if (+ 1 2) 1 2) . (if (+ 1 2) 1 2))
+    ((+ 1 1) . (+ 1 1))
+    ((let ((x 1) (y 2)) (+ x y)) . ((lambda (x y) (begin (+ x y))) 1 2))
+    ((define a 1) . (define a 1))
+    ((define (a x) (1+ x)) . (define a (lambda (x) (begin (#{1+}# x)))))
+    ((let ((a 1)) (set! a 2)) . ((lambda (a) (begin (set! a 2))) 1))
+    ))
+
+(define (test-it name tests tests-name)
+  (define len (length tests))
+  (for-each
+   (lambda (t i)
+     (match t
+       ((src . expect)
+        (let ((r (ast->src (parser src))))
+          (or (equal? r expect)
+              (error (format #f "~a[~d]: Failed: ~a~%%%%~a" name i src (pick-out expect r))))))
+       (else (error (string-append "Invalid case in " tests-name) t))))
+   tests (iota len))
+  (format #t "* testing ~d case~:p...~%" len))
+
+(display "\n=== Pi parser tests ===\n")
+
+(with-test-prefix "Pi parser"
+
+  (pass-if "parser tests"
+    (test-it "parser test" *parser-tests* "*parser-tests*")
+    #t)
+
+  ;; TODO: add more tests
+)
