@@ -30,19 +30,20 @@
 
 ;; NOTE: we don't support forward-reference, although I'm willing to...
 (define* (parse-it expr env #:key (top? #f) (body-begin? #f) (use 'test) (op? #f))
+  (format #t "PPP: ~a, top: ~a, body-begin: ~a~%" expr top? body-begin?)
   (match expr
     (('define pattern e ...)
      (cond
+      ((or (not top?) (and top? (not body-begin?)))
+       ;; According to R5Rs, there're only two situations to use `define':
+       ;; 1. In the top-level (toplevel definition).
+       ;; 2. In the beginning of body (inner definition).
+       (throw 'pi-error "definition in expression context, where definitions are not allowed, in form " expr))
       ((null? e)
        ;; R6Rs supports definition without expression, which implies to define
        ;; a var with the value `unspecifed'.
        ;; With respect to the future Scheme, we support it anyway.
        (gen-constant 'unspecified))
-      ((and (not top?) (not body-begin?))
-       ;; According to R5Rs, there're only two situations to use `define':
-       ;; 1. In the top-level (toplevel definition).
-       ;; 2. In the beginning of body (inner definition).
-       (throw 'pi-error "definition in expression context, where definitions are not allowed, in form " expr))
       (else
        (match pattern
          ((? symbol? v) (make-def (parse-it (car e) env #:body-begin? #t) v))
@@ -177,7 +178,7 @@
                     expr)))))
 
 (define (parser expr)
-  (parse-it expr *top-level* #:top? #t))
+  (parse-it expr *top-level* #:top? #t #:body-begin? #t))
 
 (define (ast->src node)
   (match node
