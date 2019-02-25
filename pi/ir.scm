@@ -17,14 +17,16 @@
 (define-module (pi ir)
   #:use-module (pi utils)
   #:use-module ((rnrs) #:select (define-record-type))
-  #:export (make-insr insr-subx
+  #:export (make-insr
+            insr-subx
+
             make-insr-lit insr-lit-val
             make-insr-ref insr-ref-var
             make-insr-set insr-set-var
             make-insr-cnd
             make-insr-prim insr-prim-op
             make-insr-app
-            make-insr-lam insr-lam-par
+            make-insr-closure insr-closure-par
             make-insr-seq
 
             make-ctx ctx-code ctx-env ctx-upper))
@@ -39,12 +41,11 @@
 (define-record-type insr-cnd (parent insr))              ; condition
 (define-record-type insr-prim (parent insr) (fields op)) ; primitive
 (define-record-type insr-app (parent insr))              ; application
-(define-record-type insr-lam (parent insr) (fields par))  ; lambda
+(define-record-type insr-closure (parent insr) (fields par))  ; closure
 (define-record-type insr-seq (parent insr))              ; sequence
 
 ;; for context
 (define-record-type ctx
   (fields
    code
-   env ; current env
-   upper)) ; upper level env
+   env)) ; current env

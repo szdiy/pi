@@ -18,40 +18,40 @@
   #:use-module (pi utils)
   #:use-module ((rnrs) #:select (define-record-type))
   #:export (ast make-ast ast?
-            ast-subx
-            
-            def make-def def?
-            def-var
+                ast-subx
 
-            ref make-ref ref?
-            ref-var
+                def make-def def?
+                def-var
 
-            assign make-assign assign?
-            assign-var
-            
-            cnd make-cnd cnd?
+                ref make-ref ref?
+                ref-var
 
-            pcall make-pcall pcall?
-            pcall-op pcall-args
+                assign make-assign assign?
+                assign-var
 
-            call make-call call?
-            call-op call-args
-            
-            lam make-lam lam?
-            lam-params lam-has-opt?
+                cnd make-cnd cnd?
 
-            seq make-seq seq?
+                pcall make-pcall pcall?
+                pcall-op pcall-args
 
-            binding make-binding binding?
-            binding-id
-            
-            var make-var var?
-            var-uid var-global?
-            new-var
+                call make-call call?
+                call-op call-args
 
-            ->special-form
+                closure make-closure lam?
+                lam-params lam-has-opt?
 
-            macro-expander))
+                seq make-seq seq?
+
+                binding make-binding binding?
+                binding-id
+
+                var make-var var?
+                var-uid var-global?
+                new-var
+
+                ->special-form
+
+                macro-expander))
 
 ;; AST type
 (define-record-type ast (fields subx))
@@ -60,15 +60,15 @@
 (define-record-type def (parent ast) (fields var)) ; var define
 (define-record-type assign (parent ast) (fields var)) ; var assignment
 (define-record-type cnd (parent ast))              ; condition
-(define-record-type pcall (parent ast) (fields op args)) ; prim-call 
+(define-record-type pcall (parent ast) (fields op args)) ; prim-call
 ;; calling a function, ast is a list: (func args ...)
 (define-record-type call (parent ast) (fields op args))
-(define-record-type lam (parent ast) (fields params has-opt?))  ; lambda
+(define-record-type closure (parent ast) (fields params has-opt?))  ; closure
 (define-record-type seq (parent ast))              ; sequence
 (define-record-type macro (parent ast) (fields expander))
 
 ;; for env, var, and macros
-(define-record-type binding (fields id))
+(define-record-type binding (parent ast) (fields id))
 (define-record-type var (parent binding) (fields uid global?))
 (define* (new-var id #:optional (global? #f)) (make-var id (newsym id) global?))
 

@@ -28,9 +28,16 @@
   '(quote quasiquote unquote unquote-splicing lambda if set!
           cond and or case let let* letrec begin do define delay))
 
+(define (_quasiquote obj)
+  (match obj
+    ((('unquote unq) rest ...) `(cons ,unq ,(_quasiquote rest)))
+    (('unquote unq) unq)
+    ((('unquote-splicing unqsp) rest ...) `(concat ,unqsp ,(_quasiquote rest)))
+    ((head rest ...) (list 'cons (_quasiquote head) (_quasiquote rest)))
+    (else `(quote ,obj))))
+
 ;; NOTE: we don't support forward-reference, although I'm willing to...
 (define* (parse-it expr env #:key (top? #f) (body-begin? #f) (use 'test) (op? #f))
-  (format #t "PPP: ~a, top: ~a, body-begin: ~a~%" expr top? body-begin?)
   (match expr
     (('define pattern e ...)
      (cond
@@ -69,31 +76,31 @@
     (('cond body ...)
      (let ((tmpvar (gensym "cond.tmp.var-")))
        ;; Because I don't have time at present to write macro system, I have to write `cond'
-       ;; as a built-in special form here. It'd be a macro (external special form) in the future. 
+       ;; as a built-in special form here. It'd be a macro (external special form) in the future.
        (match body
          ((('else rhs ...))
           (parse-it `(begin ,@rhs) env))
          (((tst '=> rhs) rest ...)
           (let ((x (tmpvar)))
-            (parse-it `(let ((,x tst))
+            (parse-it `(let ((,x ,tst))
                          (if ,x
-                             (rhs ,x)
+                             (,rhs ,x)
                              (cond ,@rest)))
                       env)))
          (((tst rhs ...) rest ...)
-          (parse-it `(if tst
+          (parse-it `(if ,tst
                          (begin ,@rhs)
                          (cond ,@rest))
                     env)))))
     (('lambda pattern body ...)
      (when (null? body)
-           (throw 'pi-error "lambda: bad lambda in form " expr))
+       (throw 'pi-error "lambda: bad lambda in form " expr))
      (let* ((ids (extract-ids pattern))
             (params (map new-var ids))
             (nenv (extend-env env (apply new-env params)))
             (has-opt? (or (pair? pattern) (symbol? pattern))))
-       (make-lam (parse-it (cons 'begin body) nenv #:body-begin? #t)
-                 params has-opt?)))
+       (make-closure (parse-it (cons 'begin body) nenv #:body-begin? #t)
+                     params has-opt?)))
     (('begin body ...)
      (let lp((next body) (p #t) (ret '()))
        (cond
@@ -105,13 +112,13 @@
            (else (lp (cdr next) #f (cons (parse-it (car next) env #:body-begin? #f) ret))))))))
     (('letrec ((ks vs) ...) body ...)
      (letrec ((dispatch
-                (lambda (kk vv)
-                  (cond
-                   ((and (null? kk) (null? vv)) `(begin ,@body))
-                   (else `(let ((,(car kk) #f))
-                            (set! ,(car kk) ,(car vv))
-                            ,(dispatch (cdr kk) (cdr vv))))))))
-              (parse-it (dispatch ks vs) env)))
+               (lambda (kk vv)
+                 (cond
+                  ((and (null? kk) (null? vv)) `(begin ,@body))
+                  (else `(let ((,(car kk) #f))
+                           (set! ,(car kk) ,(car vv))
+                           ,(dispatch (cdr kk) (cdr vv))))))))
+       (parse-it (dispatch ks vs) env)))
     (('let ((ks vs) ...) body ...) ; common let
      (parse-it `((lambda ,ks ,@body) ,@vs) env))
     (('let id ((ks vs) ...) body ...) ; named let
@@ -122,12 +129,12 @@
      (parse-it `(let () ,@body) env))
     (('let* ((ks vs) ...) body ...)
      (letrec ((dispatch
-                (lambda (kk vv)
-                  (cond
-                   ((and (null? kk) (null? vv)) `(begin ,@body))
-                   (else `(let ((,(car kk) ,(car vv)))
-                            ,(dispatch (cdr kk) (cdr vv))))))))
-              (parse-it (dispatch ks vs) env)))
+               (lambda (kk vv)
+                 (cond
+                  ((and (null? kk) (null? vv)) `(begin ,@body))
+                  (else `(let ((,(car kk) ,(car vv)))
+                           ,(dispatch (cdr kk) (cdr vv))))))))
+       (parse-it (dispatch ks vs) env)))
     (('or rest ...)
      (let ((tmpvar (gensym "or.tmp.var-")))
        (cond
@@ -150,6 +157,9 @@
            (parse-it `((lambda (,b1 ,b2) (if ,b1 (,b2) ,b1))
                        ,(car rest) (lambda () (and ,@(cdr rest))))
                      env))))))
+    (('quote s) (gen-constant s))
+    (('unquote k) (parse-it k env))
+    (('quasiquote q) (parse-it (_quasiquote q) env))
     ((op args ...)
      (cond
       ((is-primitive? op)
@@ -161,7 +171,6 @@
           ((not f) (throw 'pi-error (format #f "PROC `~a': unbound variable: " op)))
           ((macro? f) ((macro-expander f) args env))
           (else (make-call f (map (lambda (e) (parse-it e env #:use 'value)) args))))))))
-    ;; TODO: add quote/unquote/quansiquote...
     ((? symbol? k)
      (let ((v (binding-ref env k)))
        ;; TODO: v shouldn't be #f, it'll be created at top-level for forward-reference
@@ -180,7 +189,7 @@
 (define (parser expr)
   (parse-it expr *top-level* #:top? #t #:body-begin? #t))
 
-(define (ast->src node)
+(define* (ast->src node #:optional (hide-begin? #t))
   (match node
     (($ constant _ val type) (unless (eq? 'unspecified type) val))
     (($ def ($ ast _ subx) v) `(define ,(ast->src v) ,(ast->src subx)))
@@ -188,11 +197,16 @@
     (($ assign ($ ast _ subx) v) `(set! ,(ast->src v) ,(ast->src subx)))
     (($ cnd ($ ast _ subx))
      (match subx
-       ((c b1 b2) `(if ,(ast->src c) ,(ast->src b1) ,(ast->src b2)))
+       ((c b1 b2) `(if ,(ast->src c) ,(ast->src b1 #f) ,(ast->src b2 #f)))
        (else (throw 'pi-error "I don't know what's wrong dude!!!" subx))))
     (($ pcall _ op args) `(,(prim-name op) ,@(map ast->src args)))
     (($ call _ op args) `(,(ast->src op) ,@(map ast->src args)))
-    (($ lam ($ ast _ subx) params _) `(lambda ,(map ast->src params) ,(ast->src subx)))
-    (($ seq ($ ast _ subx)) `(begin ,@(map ast->src subx)))
+    (($ closure ($ ast _ subx) params _) `(lambda ,(map ast->src params) ,(ast->src subx)))
+    (($ seq ($ ast _ subx))
+     (cond
+      ((zero? (length subx)) (throw 'pi-error "Well, null seq dude huh??"))
+      ((= (length subx) 1) (ast->src (car subx)))
+      (hide-begin? (map ast->src subx))
+      (else `(begin ,@(map ast->src subx)))))
     (($ var ($ binding _ id) uid _) id)
     (else node)))

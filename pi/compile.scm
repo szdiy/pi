@@ -16,7 +16,7 @@
 
 (define-module (pi compile)
   #:use-module (pi parser)
-  #:export (parser))
+  #:export (compile))
 
 (define (reader port)
   (let lp((ret '()))

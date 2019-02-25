@@ -1,5 +1,5 @@
 ;;  -*-  indent-tabs-mode:nil; coding: utf-8 -*-
-;;  Copyright (C) 2015
+;;  Copyright (C) 2015,2019
 ;;      "Mu Lei" known as "NalaGinrut" <mulei@gnu.org>
 ;;  Pi is free software: you can redistribute it and/or modify
 ;;  it under the terms of the GNU General Public License published
@@ -14,7 +14,7 @@
 ;;  You should have received a copy of the GNU General Public License
 ;;  along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-(define-module (pi types) 
+(define-module (pi types)
   #:use-module (pi env)
   #:use-module ((rnrs) #:select (define-record-type))
   #:use-module (srfi srfi-1)
@@ -82,8 +82,8 @@
         (and (> x (car range)) (< x (cdr range))))
       (throw 'pi-error (format #f "'~a' is not an integer!" x))))
 
-(define *immediates*
+(define *immediates-pred*
   (list integer? string? char? boolean? pair? list? vector?))
 
 (define (is-immediate? x)
-  (any (lambda (c) (c x)) *immediates*))
+  (any (lambda (c) (c x)) *immediates-pred*))
