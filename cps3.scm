@@ -1,7 +1,7 @@
-(import (ice-9 match)
-        (ice-9 pretty-print)
-        (srfi srfi-1)
-        (rnrs))
+'(import (ice-9 match)
+         (ice-9 pretty-print)
+         (srfi srfi-1)
+         (rnrs))
 
 (define-syntax-rule (type-check o pred)
   (when (not (pred o))
@@ -25,6 +25,12 @@
           (lambda (f ...)
             (type-check f t) ...
             (new f ...))))))))
+
+(define (make-object-list-pred lst check)
+  (and (list? lst) (every check lst)))
+
+(define (symbol-list? lst) (make-object-list-pred lst symbol?))
+(define (cps-list? lst) (make-object-list-pred lst cps?))
 
 (define (immediate? x)
   (or (number? x)
@@ -64,28 +70,28 @@
    (val immediate?)))
 (define-record-type let/k (parent value/k)
   (fields
-   (vars symbol?)
-   (vals cps?)))
+   (vars symbol-list?)
+   (vals cps-list?)))
 (define-record-type lambda/k (parent value/k)
   (fields
    (kont-arg symbol?)
-   (args symbol?)
+   (args symbol-list?)
    (body cps?)))
 
 (define-record-type seq/k (parent cps)
   (fields
-   ;; TODO
-   ))
+   (body list?)))
 
 ;; we unify both pari/list to list
-(define-record-type list/k (parent cps)
+(define-record-type list/k (parent value/k)
   (fields
-   (index number?)))
+   (size number?)
+   (content list?)))
 
 ;; Local continuation is actually labelled basic-block
 (define-record-type local-cont/k (parent cps)
   (fields
-   (arg cps?)
+   (arg symbol-list?)
    (body cps?)))
 
 ;; Application of a continuation
@@ -118,15 +124,43 @@
 
 ;; capture-free substitution
 (define (cfs expr sub-list)
+  (define (filter-bound-var bound-vars sub-list)
+    (filter-map (lambda (v)
+                  (if (memq (car v) bound-vars)
+                      #f
+                      v))
+                sub-list))
   (match expr
-    (($ lambda/k ($ cps kont kont-name) kont-arg args body)
-     (make-lambda/k
-      (cfs kont sub-list) kont-name
-      kont-arg args (cfs body sub-list)))
-    (($ let/k ($ cps kont kont-name) vars vals)
+    ;; value cps
+    (($ lambda/k ($ value/k ($ cps _ kont kont-name)) kont-arg args body)
+     (let ((new-sub-list (filter-bound-var args sub-list)))
+       (make-lambda/k
+        (cfs kont new-sub-list) kont-name
+        kont-arg args (cfs body new-sub-list))))
+    (($ let/k ($ value/k ($ cps _ kont kont-name)) vars vals)
      (make-let/k
       (cfs kont sub-list) kont-name
-      vars (map (lambda (v) (cfs v sub-list)) vals)))
+      vars
+      (map (lambda (var val)
+             (or (assoc-ref sub var) val))
+           vars vals)))
+    (($ list/k ($ value/k ($ cps _ kont kont-name)) size lst)
+     (make-list/k
+      (cfs kont sub-list) kont-name
+      size
+      (map (lambda (e) (cfs e sub-list)) lst)))
+    ((? imm/k) expr) ; immediate value can't be subsituted
+    ;; common cps
+    (($ seq/k ($ cps _ kont kont-name) body)
+     (make-seq/k
+      (cfs kont sub-list) kont-name
+      (map (lambda (e) (cfs e sub-list)) body)))
+    (($ branch/k ($ cps _ kont kont-name) cnd true false)
+     (make-branch/k
+      (cfs kont sub-list) kont-name
+      (cfs cnd sub-list)
+      (cfs true sub-list)
+      (cfs false sub-list)))
     (else expr)))
 
 (define* (expr->cps expr #:optional (kont 'end-cont))
