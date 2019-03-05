@@ -1,7 +1,7 @@
-'(import (ice-9 match)
-         (ice-9 pretty-print)
-         (srfi srfi-1)
-         (rnrs))
+(import (ice-9 match)
+        (ice-9 pretty-print)
+        (srfi srfi-1)
+        (rnrs))
 
 (define-syntax-rule (type-check o pred)
   (when (not (pred o))
@@ -63,6 +63,13 @@
    (kont-name symbol?) ; the id of the continuation
    ))
 
+(define-record-type end/k
+  (fields (kont-name symbol?)))
+
+(define end-cont (make-end/k (newsym "kont-")))
+
+(define-record-type end/k (parent cps))
+
 (define-record-type value/k (parent cps))
 ;; Immediate value
 (define-record-type imm/k (parent value/k)
@@ -110,7 +117,7 @@
    (primitive primitive?)
    (arg cps?)))
 
-;; cnd should be value, true/false should be continuation
+;; cnd should be value, true/false should be continuation.
 ;; In this case, the kont is useless and should be #f.
 ;; The actual continuation is in true or false branch.
 (define-record-type branch/k (parent cps)
@@ -118,9 +125,6 @@
    (cnd value/k?)
    (true cps?)
    (false cps?)))
-
-(define-record-type )
-(define end-cont identity)
 
 ;; capture-free substitution
 (define (cfs expr sub-list)
@@ -138,9 +142,11 @@
         (cfs kont new-sub-list) kont-name
         kont-arg args (cfs body new-sub-list))))
     (($ let/k ($ value/k ($ cps _ kont kont-name)) vars vals)
-     (make-let/k
-      (cfs kont sub-list) kont-name
-      vars
+     ;; The cfs to let/k is the typical beta-reduction
+     (cfs
+      (make-seq/k
+       end-cont kont-name
+       kont)
       (map (lambda (var val)
              (or (assoc-ref sub var) val))
            vars vals)))
@@ -149,7 +155,7 @@
       (cfs kont sub-list) kont-name
       size
       (map (lambda (e) (cfs e sub-list)) lst)))
-    ((? imm/k) expr) ; immediate value can't be subsituted
+    ((or (? end/k?) (? imm/k?)) expr)    ; immediate value can't be subsituted
     ;; common cps
     (($ seq/k ($ cps _ kont kont-name) body)
      (make-seq/k
