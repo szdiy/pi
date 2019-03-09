@@ -30,6 +30,8 @@
             prim-name prim-label prim-proc
             is-primitive?))
 
+;; NOTE: The implementation here, should be the generator or caller of any
+;;       specific primitive.
 (define-typed-record primitive
   (fields
    (name symbol?)
@@ -38,11 +40,13 @@
    (impl procedure?)))
 
 (define-syntax define-primitive
-  (syntax-rules (#:with-side-effect)
-    ((_ name func)
-     (define-primitive name #f func))
-    ((_ name #:with-side-effect func)
-     (define-primitive 'name #t func))
+  (syntax-rules (#:has-side-effect)
+    ((_ (name args ...) body ...)
+     (define-primitive
+       name #f
+       (lambda (args ...) body ...)))
+    ((_ (name args ...) #:has-side-effect body ...)
+     (define-primitive 'name #t (lambda (args ...) body ...)))
     ((_ name side-effect? func)
      (make-primitive
       'name
@@ -50,9 +54,18 @@
       side-effect?
       func))))
 
+(define-primitive (+ args ...)
+  ;; TODO: implemente + operator
+  #t)
+
+(define-primitive (set! v e)
+  ;; TODO
+  #t)
 
 ;; --------------------------------------------
-(define-record-type prim (fields name label proc)) ; primitive
+;; low-level abstraction of primitive
+;; Only used for code generation
+(define-record-type prim (fields name label proc))
 
 (define (caller-save x) #t)
 (define (callee-save x) #t)
@@ -64,27 +77,27 @@
     (emit-ret)))
 
 (define (%%add1 x) #t)
-(define (%add1 x)
+(define-primitive (%add1 x)
   (emit-prim-template
    1 "__prim_add1"
    (%%add1 x)))
 
 (define (%%sub1 x) #t)
-(define (%sub1 x)
+(define-primitive (%sub1 x)
   (emit-prim-template
    1 "__prim_sub1"
    (%%sub1 x)))
 
-(define (%%add args)
+(define-primitive (%%add args)
   (apply + args))
 (define (%add . args)
   (emit-prim-template
    #f "__prim_add"
    (%%add args)))
 
-(define (%%sub args)
+(define-primitive (%%sub args)
   (apply + args))
-(define (%sub . args)
+(define-primitive (%sub . args)
   (emit-prim-template
    #f "__prim_add"
    (%%add args)))
