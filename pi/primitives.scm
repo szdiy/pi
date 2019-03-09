@@ -1,5 +1,5 @@
 ;;  -*-  indent-tabs-mode:nil; coding: utf-8 -*-
-;;  Copyright (C) 2015
+;;  Copyright (C) 2015,2019
 ;;      "Mu Lei" known as "NalaGinrut" <mulei@gnu.org>
 ;;  Pi is free software: you can redistribute it and/or modify
 ;;  it under the terms of the GNU General Public License published
@@ -18,10 +18,40 @@
   #:use-module (pi sasm)
   #:use-module (ice-9 match)
   #:use-module ((rnrs) #:select (define-record-type))
-  #:export (make-prim prim?
+  #:export (primitive-name
+            primitive-arity
+            primitive-has-side-effact?
+            primitive-impl
+            define-primitive
+
+            ;; ----------------------------------
+            make-prim
+            prim?
             prim-name prim-label prim-proc
             is-primitive?))
 
+(define-typed-record primitive
+  (fields
+   (name symbol?)
+   (arity integer?)
+   (has-side-effect? boolean?)
+   (impl procedure?)))
+
+(define-syntax define-primitive
+  (syntax-rules (#:with-side-effect)
+    ((_ name func)
+     (define-primitive name #f func))
+    ((_ name #:with-side-effect func)
+     (define-primitive 'name #t func))
+    ((_ name side-effect? func)
+     (make-primitive
+      'name
+      (procedure-arity func)
+      side-effect?
+      func))))
+
+
+;; --------------------------------------------
 (define-record-type prim (fields name label proc)) ; primitive
 
 (define (caller-save x) #t)

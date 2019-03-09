@@ -1,5 +1,5 @@
 ;;  -*-  indent-tabs-mode:nil; coding: utf-8 -*-
-;;  Copyright (C) 2015
+;;  Copyright (C) 2015,2019
 ;;      "Mu Lei" known as "NalaGinrut" <mulei@gnu.org>
 ;;  Pi is free software: you can redistribute it and/or modify
 ;;  it under the terms of the GNU General Public License published
@@ -39,7 +39,12 @@
             queue-length
             queue->list
             list->stack
-            list->queue))
+            list->queue
+            define-typed-record
+            make-object-list-pred
+            symbol-list?
+            cps-list?
+            immediate?))
 
 (define (newsym sym) (gensym (symbol->string sym)))
 
@@ -67,7 +72,7 @@
 (define stack-push! q-push!)
 (define stack-top q-front)
 (define stack-remove! %q-remove-with-key!)
-(define stack-empty? q-empty?) 
+(define stack-empty? q-empty?)
 (define stack-length q-length)
 (define (stack->list stk) (list-copy (stack-slots stk)))
 
@@ -87,3 +92,40 @@
 (define* (list->queue lst #:optional (queue (new-queue)))
   (for-each (lambda (x) (queue-in! queue x)) lst)
   queue)
+
+
+(define-syntax-rule (type-check o pred)
+  (when (not (pred o))
+    (throw 'pi-error (format #f "Wrong type, expect `~a'" 'pred))))
+
+(define-syntax define-typed-record
+  (syntax-rules (parent fields)
+    ((_ tr (parent p) (fields (f t) ...))
+     (define-record-type tr (parent p)
+                         (fields f ...)
+                         (protocol
+                          (lambda (new)
+                            (lambda (f ...)
+                              (type-check f t) ...
+                              (new f ...))))))
+    ((_ tr (fields (f t) ...))
+     (define-record-type tr
+       (fields f ...)
+       (protocol
+        (lambda (new)
+          (lambda (f ...)
+            (type-check f t) ...
+            (new f ...))))))))
+
+(define (make-object-list-pred lst check)
+  (and (list? lst) (every check lst)))
+
+(define (symbol-list? lst) (make-object-list-pred lst symbol?))
+(define (cps-list? lst) (make-object-list-pred lst cps?))
+
+(define (immediate? x)
+  (or (number? x)
+      (string? x)
+      (symbol? x)
+      (list? x)
+      (pair? x)))
