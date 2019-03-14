@@ -37,14 +37,18 @@
 (define-typed-record end/k (parent cps))
 
 (define-typed-record value/k (parent cps))
+
 ;; Immediate value
 (define-typed-record imm/k (parent value/k)
   (fields
    (val immediate?)))
+
 (define-typed-record let/k (parent value/k)
   (fields
    (vars symbol-list?)
-   (vals cps-list?)))
+   (vals cps-list?)
+   (body seq/k?)))
+
 (define-typed-record lambda/k (parent value/k)
   (fields
    (kont-arg symbol?)
@@ -89,13 +93,16 @@
 (define-typed-record branch/k (parent cps)
   (fields
    (cnd value/k?)
+   ;; Although we will wrap true/false branch into the new
+   ;; continuation, we still leave these 2 slots here for
+   ;; storing them, in case we need to analysis them later.
    (true cps?)
    (false cps?)))
 
 (define-typed-record def/k (parent cps)
   (fields
-   (names symbol-list?)
-   (vals cps-list?)))
+   (names symbol?)
+   (vals cps?)))
 
 ;; capture-free substitution
 (define (cfs expr sub-list)
@@ -149,11 +156,16 @@
     ((? atom?) (cps-comp expr kont))
     ((? var?) (cps-comp expr kont))
     (('lambda (args ...) body ...)
+     (make-lambda/k
+      (newsym "kont-") end-cont
+      (newsym "kont-arg-")
+      (map fix-var args)
+      (map (lambda (e) (expr->cps e end-cont)) body))
      `(lambda (k ,@args) ,@(map (lambda (e) (expr->cps e k)) body)))
     (('define (v args ...) body ...)
-     (make-let/k
+     (make-def/k
       (cps-kont-name kont) (cps-kont kont)
-      (list (fix-var v))
+      (fix-var v)
       (make-lambda/k
        (newsym "cps-val-") 'value/k
        (newsym "kont-arg-")
@@ -162,13 +174,37 @@
     (`(define ,v ,e)
      (make-def/k
       (cps-kont-name kont) (cps-kont kont)
-      (list (fix-var v))
-      (list (expr->cps e kont))))
+      (fix-var v)
+      (expr->cps e kont)))
     (`(set! ,v ,e)
-
-     (let ((k `(lambda (r1) (,kont (set! ,v r1)))))
-       `(,kont ,(expr->cps e kont))))
+     ;; NOTE: set! is a special primitive since we need to fix
+     ;;       namping of the var with fix-var.
+     ;;       So we pick it out here.
+     (make-prim-app/k
+      (cps-kont-name kont) kont
+      primitive/set!
+      (list (fix-var v) (expr->cps e kont))))
     (`(if ,cnd ,b1 ,b2)
+     (let* ((true-branch
+             (make-cps
+              (newsym "true-kont-") kont
+              ))))
+     (make-local-cont/k
+      (newsym "local-kont-") kont
+      ())
+     (let* ((true-branch (expr->cps b1))
+            (false-branch (expr->cps b2))
+            (current-kont
+             (make-local-cont/k
+              (newsym "local-kont-") kont
+              (list (newsym "kont-cnd-"))
+              )))
+       (make-branch/k
+        (newsym "branch-kont-") current-kont
+        (expr->cps cnd kont)
+        true-branch
+        false-branch))
+
      (let ((k `(lambda (c1) (if c1 ,(expr->cps b1) ,(expr->cps b2)))))
        `(,kont ,(expr->cps cnd k))))
     (('args args ...) `(,kont (list ,kont ,@(map (lambda (e) (expr->cps e kont)) args))))
@@ -177,6 +213,11 @@
     (let ((k `(lambda (r1) (lambda (r2) (,kont (apply r1 r2))))))
     #;`(,(expr->cps (car expr) k) ,@(map (lambda (ee) (expr->cps ee kont)) e)) ; ; ; ;
     `(apply ,(expr->cps (car expr) k) )))
+    (((? is-op-a-primitive? p) args ...)
+     (make-prim-app/k
+      (cps-kont-name kont) kont
+      (symbol->primitive)
+      (map (lambda (e) (expr->cps e kont)) args)))
     ((e1 e2 ...)
      (let ((k `(lambda (k r1) (lambda r2 (,kont (apply r1 k r2))))))
        `(apply ,(expr->cps e1 k)  #;,(pk "kont"kont) ,(expr->cps `(args ,@e2) kont)

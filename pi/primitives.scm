@@ -18,7 +18,11 @@
   #:use-module (pi sasm)
   #:use-module (ice-9 match)
   #:use-module ((rnrs) #:select (define-record-type))
-  #:export (primitive-name
+  #:export (symbol->primitive
+            is-op-a-primitive?
+            primitive-register!
+
+            primitive-name
             primitive-arity
             primitive-has-side-effact?
             primitive-impl
@@ -30,8 +34,15 @@
             prim-name prim-label prim-proc
             is-primitive?))
 
-;; NOTE: The implementation here, should be the generator or caller of any
-;;       specific primitive.
+(define *primitives* (make-hash-table))
+(define (symbol->primitive (hash-ref *primitives* x)))
+(define (is-op-a-primitive? x)
+  (and (symbol? x)
+       (symbol->primitive x)))
+(define (primitive-register! p proc) (hash-set! *primitives* p proc))
+
+;; NOTE: The implementation here, should be the generator or caller of
+;;       any specific primitive.
 (define-typed-record primitive
   (fields
    (name symbol?)
@@ -48,11 +59,13 @@
     ((_ (name args ...) #:has-side-effect body ...)
      (define-primitive 'name #t (lambda (args ...) body ...)))
     ((_ name side-effect? func)
-     (make-primitive
+     (primitive-register!
       'name
-      (procedure-arity func)
-      side-effect?
-      func))))
+      (make-primitive
+       'name
+       (procedure-arity func)
+       side-effect?
+       func)))))
 
 (define-primitive (+ args ...)
   ;; TODO: implemente + operator
@@ -102,14 +115,14 @@
    #f "__prim_add"
    (%%add args)))
 
-(define *primitives*
+(define *primitives-gen*
   `((1+ . ,(make-prim '1+ "__prim_add1" %add1))
     (1- . ,(make-prim '1- "__prim_sub1" %sub1))
     (+  . ,(make-prim '+ "__prim_add"  %add))
     (-  . ,(make-prim '- "__prim_sub"  %sub))
     ))
 
-(define (is-primitive? op) (assoc-ref *primitives* op))
+(define (is-primitive-gen? op) (assoc-ref *primitives* op))
 
 (define (get-prim op)
   (or (and=> (assq-ref *primitives* op) caddr)
