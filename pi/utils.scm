@@ -44,6 +44,7 @@
             make-object-list-pred
             symbol-list?
             cps-list?
+            any?
             immediate?))
 
 (define (newsym sym) (gensym (symbol->string sym)))
@@ -94,23 +95,25 @@
   queue)
 
 
-(define-syntax-rule (type-check o pred)
-  (when (not (pred o))
-    (throw 'pi-error (format #f "Wrong type, expect `~a'" 'pred))))
+(define-syntax-rule (type-check o preds ...)
+  (or (any (lambda (p) (p o)) preds ...)
+      (throw 'pi-error
+             (format #f "Wrong type, expect ~{`~a'~^,~}"
+                     'preds ...))))
 
 (define-syntax define-typed-record
   (syntax-rules (parent fields)
     ((_ tr (parent p) (fields (f t) ...))
      (define-record-type tr (parent p)
-                         (fields f ...)
-                         (protocol
-                          (lambda (new)
-                            (lambda (f ...)
-                              (type-check f t) ...
-                              (new f ...))))))
-    ((_ tr (fields (f t) ...))
-     (define-record-type tr
        (fields f ...)
+       (protocol
+        (lambda (new)
+          (lambda (f ...)
+            (type-check f t) ...
+            (new f ...))))))
+    ((_ tr (fields (f t t* ...) ...))
+     (define-record-type tr
+         (fields f ...)
        (protocol
         (lambda (new)
           (lambda (f ...)
@@ -120,8 +123,12 @@
 (define (make-object-list-pred lst check)
   (and (list? lst) (every check lst)))
 
-(define (symbol-list? lst) (make-object-list-pred lst symbol?))
-(define (cps-list? lst) (make-object-list-pred lst cps?))
+(define (symbol-list? lst)
+  (make-object-list-pred lst symbol?))
+(define (cps-list? lst)
+  (make-object-list-pred lst cps?))
+
+(define (any? o) #t)
 
 (define (immediate? x)
   (or (number? x)

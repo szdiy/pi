@@ -28,6 +28,9 @@
             primitive-impl
             define-primitive
 
+            special-form
+            make-special-form:if
+
             ;; ----------------------------------
             make-prim
             prim?
@@ -74,6 +77,13 @@
 (define-primitive (set! v e)
   ;; TODO
   #t)
+
+(define-record-type special-form)
+(define-typed-record special-form:if (parent special-form)
+  (fields
+   (cnd symbol?)
+   (true symbol?)
+   (false symbol?)))
 
 ;; --------------------------------------------
 ;; low-level abstraction of primitive

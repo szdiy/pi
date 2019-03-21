@@ -178,35 +178,33 @@
       (expr->cps e kont)))
     (`(set! ,v ,e)
      ;; NOTE: set! is a special primitive since we need to fix
-     ;;       namping of the var with fix-var.
+     ;;       naming of the var with fix-var.
      ;;       So we pick it out here.
      (make-prim-app/k
       (cps-kont-name kont) kont
       primitive/set!
       (list (fix-var v) (expr->cps e kont))))
     (`(if ,cnd ,b1 ,b2)
-     (let* ((true-branch
-             (make-cps
-              (newsym "true-kont-") kont
-              ))))
-     (make-local-cont/k
-      (newsym "local-kont-") kont
-      ())
-     (let* ((true-branch (expr->cps b1))
-            (false-branch (expr->cps b2))
+     (let* ((true-branch-var (gensym "true-kont-"))
+            (false-branch-var (gensym "false-kont-"))
+            (true-branch (expr->cps b1 kont))
+            (false-branch (expr->cps b2 kont))
+            (cnd-var (gensym "cnd-kont-"))
+            (cnd-val (expr->cps cnd kont))
             (current-kont
-             (make-local-cont/k
-              (newsym "local-kont-") kont
-              (list (newsym "kont-cnd-"))
-              )))
+             (make-let/k
+              (newsym "let-kont-") kont
+              (list true-branch-var false-branch-var cnd-var)
+              (list true-branch false-branch cnd-val)
+              (make-special-form:if
+               cnd-var
+               true-branch-var
+               false-branch-var))))
        (make-branch/k
         (newsym "branch-kont-") current-kont
-        (expr->cps cnd kont)
+        cnd-val
         true-branch
-        false-branch))
-
-     (let ((k `(lambda (c1) (if c1 ,(expr->cps b1) ,(expr->cps b2)))))
-       `(,kont ,(expr->cps cnd k))))
+        false-branch)))
     (('args args ...) `(,kont (list ,kont ,@(map (lambda (e) (expr->cps e kont)) args))))
     #;
     ((('lambda (args ...) body ...) e ...)
