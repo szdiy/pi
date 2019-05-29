@@ -47,13 +47,13 @@
   (fields
    (vars symbol-list?)
    (vals cps-list?)
-   (body seq/k?)))
+   (body list?)))
 
 (define-typed-record lambda/k (parent value/k)
   (fields
    (kont-arg symbol?)
    (args symbol-list?)
-   (body cps?)))
+   (body list?)))
 
 (define-typed-record seq/k (parent cps)
   (fields
@@ -80,7 +80,7 @@
 (define-typed-record func-app/k (parent application/k)
   (fields
    (func cps?)
-   (arg cps?)))
+   (args cps-list?)))
 
 (define-typed-record prim-app/k (parent application/k)
   (fields
@@ -88,14 +88,12 @@
    (arg cps?)))
 
 ;; cnd should be value, true/false should be continuation.
-;; In this case, the kont is useless and should be #f.
-;; The actual continuation is in true or false branch.
 (define-typed-record branch/k (parent cps)
   (fields
+   ;; Although we will wrap the actual branching into the new
+   ;; continuation, we still leave these 3 slots here for
+   ;; storing them, it's a trick for type checking here.
    (cnd value/k?)
-   ;; Although we will wrap true/false branch into the new
-   ;; continuation, we still leave these 2 slots here for
-   ;; storing them, in case we need to analysis them later.
    (true cps?)
    (false cps?)))
 
@@ -157,7 +155,7 @@
     ((? var?) (cps-comp expr kont))
     (('lambda (args ...) body ...)
      (make-lambda/k
-      (newsym "kont-") end-cont
+      (newsym "lambda/k-") end-cont
       (newsym "kont-arg-")
       (map fix-var args)
       (map (lambda (e) (expr->cps e end-cont)) body))
@@ -167,7 +165,7 @@
       (cps-kont-name kont) (cps-kont kont)
       (fix-var v)
       (make-lambda/k
-       (newsym "cps-val-") 'value/k
+       (newsym "lambda/k-") 'value/k
        (newsym "kont-arg-")
        (map fix-var args)
        (map (lambda (e) (expr->cps e kont)) body))))
@@ -193,31 +191,30 @@
             (cnd-val (expr->cps cnd kont))
             (current-kont
              (make-let/k
-              (newsym "let-kont-") kont
+              (newsym "let/k-") kont
               (list true-branch-var false-branch-var cnd-var)
               (list true-branch false-branch cnd-val)
-              (make-special-form:if
-               cnd-var
-               true-branch-var
-               false-branch-var))))
+              (list
+               (make-special-form:if
+                cnd-var
+                true-branch-var
+                false-branch-var)))))
        (make-branch/k
-        (newsym "branch-kont-") current-kont
+        (newsym "branch/k-") current-kont
         cnd-val
         true-branch
         false-branch)))
-    (('args args ...) `(,kont (list ,kont ,@(map (lambda (e) (expr->cps e kont)) args))))
-    #;
-    ((('lambda (args ...) body ...) e ...)
-    (let ((k `(lambda (r1) (lambda (r2) (,kont (apply r1 r2))))))
-    #;`(,(expr->cps (car expr) k) ,@(map (lambda (ee) (expr->cps ee kont)) e)) ; ; ; ;
-    `(apply ,(expr->cps (car expr) k) )))
     (((? is-op-a-primitive? p) args ...)
      (make-prim-app/k
       (cps-kont-name kont) kont
-      (symbol->primitive)
+      (symbol->primitive p)
       (map (lambda (e) (expr->cps e kont)) args)))
     ((e1 e2 ...)
-     (let ((k `(lambda (k r1) (lambda r2 (,kont (apply r1 k r2))))))
-       `(apply ,(expr->cps e1 k)  #;,(pk "kont"kont) ,(expr->cps `(args ,@e2) kont)
-               )))
-    (else "no")))
+     (let ((func (expr->cps e1 kont))
+           (args (lambda (e) (expr->cps e kont)) e2))
+       (make-func-app/k
+        (cps-kont-name kont) kont
+        func
+        args)))
+    (else (throw 'pi-error expr->cps
+                 "Invalid expr " expr))))
