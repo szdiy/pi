@@ -10,8 +10,8 @@
 ;; 3. No decisions as to the order of evaluation of (non-trivial) sub-expressions
 ;; Once the CPS has been generated, the remainder of the compilation process is fairly easy.
 ;; There is a reasonably direct correspondence between constructs in the CPS and machine-language.
-;; CPS is differ from Scheme in only 2 respects:
-;; 1. Each primitive function is different, in that it returns no value.
+;; 1. CPS is differ from Scheme in only 2 respects:
+;;    Each primitive function is different, in that it returns no value.
 ;;    Instead, it accepts an additional argument, the continuation, which must be a function of one
 ;;    argument, and by definition invokes the continuation tail-recursively, giving it as an argument the
 ;;    computed "value" of the primitive function. Continuations, however, do not themselves take continuations
@@ -102,7 +102,108 @@
    (names symbol?)
    (vals cps?)))
 
+;; filter -> vars -> sub-list
+;; filter should replace symbols in vars from sub-list
+(define (cps-traverse/sub expr filter sub-list)
+  (match expr
+    ;; value cps
+    (($ lambda/k ($ value/k ($ cps _ kont kont-name)) kont-arg args body)
+     (let ((new-sub-list (filter args sub-list)))
+       (make-lambda/k
+        (cps-traverse/sub kont filter new-sub-list) kont-name
+        kont-arg args (cps-traverse/sub body new-sub-list))))
+    (($ let/k ($ value/k ($ cps _ kont kont-name)) vars vals)
+     (let ((new-sub-list (filter vars sub-list)))
+       ;; Leave the value substitution to beta-reduction
+       (make-let/k
+        (make-seq/k
+         end-cont kont-name
+         (cps-traverse/sub kont filter new-sub-list))
+        (filter vars sub-list)
+        vals)))
+    (($ list/k ($ value/k ($ cps _ kont kont-name)) size lst)
+     (make-list/k
+      (cps-traverse/sub kont filter sub-list) kont-name
+      size
+      (map (lambda (e) (cps-traverse/sub e filter sub-list)) lst)))
+    ((or (? end/k?) (? imm/k?)) expr) ; immediate value can't be subsituted
+    ;; common cps
+    (($ seq/k ($ cps _ kont kont-name) body)
+     (make-seq/k
+      (cps-traverse/sub kont filter sub-list) kont-name
+      (map (lambda (e) (cps-traverse/sub e filter sub-list)) body)))
+    (($ branch/k ($ cps _ kont kont-name) cnd true false)
+     (make-branch/k
+      (cps-traverse/sub kont filter sub-list) kont-name
+      (cps-traverse/sub cnd filter sub-list)
+      (cps-traverse/sub true filter sub-list)
+      (cps-traverse/sub false filter sub-list)))
+    (else expr)))
+
+(define (cfs expr sub-list)
+  (define (filter-bound-var bound-vars sub-list)
+    (filter-map (lambda (v)
+                  (if (memq (car v) bound-vars)
+                      #f
+                      v))
+                sub-list))
+  (cps-traverse/sub expr filter-bound-var sub-list))
+
+(define (alpha-renaming expr origins renames)
+  ;; sub-list -> ((var . sub) sub-list)
+  (define (renaming vars sub-list)
+    (fold (lambda (v p)
+            (cons (or (assoc-ref sub-list v)
+                      v)
+                  p))
+          '() vars))
+  (cps-traverse/sub expr renaming (map cons origins renames)))
+
+(define (alpha-renaming expr vars sub-list)
+  (match expr
+    ;; value cps
+    (($ lambda/k ($ value/k ($ cps _ kont kont-name)) kont-arg args body)
+     (let ((new-sub-list (renaming args sub-list)))
+       (make-lambda/k
+        (cfs kont new-sub-list) kont-name
+        kont-arg args (cfs body new-sub-list))))
+    (($ let/k ($ value/k ($ cps _ kont kont-name)) vars vals)
+     ;; The cfs to let/k is the typical beta-reduction
+     (cfs
+      (make-seq/k
+       end-cont kont-name
+       kont)
+      (map (lambda (var val)
+             (or (assoc-ref sub var) val))
+           vars vals)))
+    (($ list/k ($ value/k ($ cps _ kont kont-name)) size lst)
+     (make-list/k
+      (cfs kont sub-list) kont-name
+      size
+      (map (lambda (e) (cfs e sub-list)) lst)))
+    ((or (? end/k?) (? imm/k?)) expr) ; immediate value can't be subsituted
+    ;; common cps
+    (($ seq/k ($ cps _ kont kont-name) body)
+     (make-seq/k
+      (cfs kont sub-list) kont-name
+      (map (lambda (e) (cfs e sub-list)) body)))
+    (($ branch/k ($ cps _ kont kont-name) cnd true false)
+     (make-branch/k
+      (cfs kont sub-list) kont-name
+      (cfs cnd sub-list)
+      (cfs true sub-list)
+      (cfs false sub-list)))
+    (else expr)))
+
+(define (eta-conversion expr)
+  )
+
 ;; capture-free substitution
+;; Some people would say capture-avoiding substitution, same term here.
+;; The algorithm is simple:
+;; 1. If a var is the var to substitute, then just substitute it.
+;; 2, If a var is bound, then filter it before substitution.
+;; 3. If a var is free, then rename it before substitution.
 (define (cfs expr sub-list)
   (define (filter-bound-var bound-vars sub-list)
     (filter-map (lambda (v)
@@ -131,7 +232,7 @@
       (cfs kont sub-list) kont-name
       size
       (map (lambda (e) (cfs e sub-list)) lst)))
-    ((or (? end/k?) (? imm/k?)) expr)    ; immediate value can't be subsituted
+    ((or (? end/k?) (? imm/k?)) expr) ; immediate value can't be subsituted
     ;; common cps
     (($ seq/k ($ cps _ kont kont-name) body)
      (make-seq/k
