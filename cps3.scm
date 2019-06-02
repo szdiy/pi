@@ -102,42 +102,42 @@
    (names symbol?)
    (vals cps?)))
 
-;; filter -> vars -> sub-list
-;; filter should replace symbols in vars from sub-list
-(define (cps-traverse/sub expr filter sub-list)
+;; subproc -> vars -> sub-list
+;; subproc should replace symbols in vars from sub-list
+(define (cps-traverse/sub expr subproc sub-list)
   (match expr
     ;; value cps
     (($ lambda/k ($ value/k ($ cps _ kont kont-name)) kont-arg args body)
-     (let ((new-sub-list (filter args sub-list)))
+     (let ((new-sub-list (subproc args sub-list)))
        (make-lambda/k
-        (cps-traverse/sub kont filter new-sub-list) kont-name
+        (cps-traverse/sub kont subproc new-sub-list) kont-name
         kont-arg args (cps-traverse/sub body new-sub-list))))
     (($ let/k ($ value/k ($ cps _ kont kont-name)) vars vals)
-     (let ((new-sub-list (filter vars sub-list)))
+     (let ((new-sub-list (subproc vars sub-list)))
        ;; Leave the value substitution to beta-reduction
        (make-let/k
         (make-seq/k
          end-cont kont-name
-         (cps-traverse/sub kont filter new-sub-list))
-        (filter vars sub-list)
+         (cps-traverse/sub kont subproc new-sub-list))
+        (subproc vars sub-list)
         vals)))
     (($ list/k ($ value/k ($ cps _ kont kont-name)) size lst)
      (make-list/k
-      (cps-traverse/sub kont filter sub-list) kont-name
+      (cps-traverse/sub kont subproc sub-list) kont-name
       size
-      (map (lambda (e) (cps-traverse/sub e filter sub-list)) lst)))
+      (map (lambda (e) (cps-traverse/sub e subproc sub-list)) lst)))
     ((or (? end/k?) (? imm/k?)) expr) ; immediate value can't be subsituted
     ;; common cps
     (($ seq/k ($ cps _ kont kont-name) body)
      (make-seq/k
-      (cps-traverse/sub kont filter sub-list) kont-name
-      (map (lambda (e) (cps-traverse/sub e filter sub-list)) body)))
+      (cps-traverse/sub kont subproc sub-list) kont-name
+      (map (lambda (e) (cps-traverse/sub e subproc sub-list)) body)))
     (($ branch/k ($ cps _ kont kont-name) cnd true false)
      (make-branch/k
-      (cps-traverse/sub kont filter sub-list) kont-name
-      (cps-traverse/sub cnd filter sub-list)
-      (cps-traverse/sub true filter sub-list)
-      (cps-traverse/sub false filter sub-list)))
+      (cps-traverse/sub kont subproc sub-list) kont-name
+      (cps-traverse/sub cnd subproc sub-list)
+      (cps-traverse/sub true subproc sub-list)
+      (cps-traverse/sub false subproc sub-list)))
     (else expr)))
 
 (define (cfs expr sub-list)
