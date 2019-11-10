@@ -102,16 +102,21 @@
    (names symbol?)
    (vals cps?)))
 
-;; subproc -> vars -> sub-list
+;; subproc -> cps -> vars -> sub-list -> new-sub-list
 ;; subproc should replace symbols in vars from sub-list
 (define (cps-traverse/sub expr subproc sub-list)
+  (define (do-sub vars sbl)
+    (map (lambda (v)
+           (or (assoc-ref sbl v)
+               v))
+         vars))
   (match expr
     ;; value cps
     (($ lambda/k ($ value/k ($ cps _ kont kont-name)) kont-arg args body)
      (let ((new-sub-list (subproc args sub-list)))
        (make-lambda/k
         (cps-traverse/sub kont subproc new-sub-list) kont-name
-        kont-arg args (cps-traverse/sub body new-sub-list))))
+        kont-arg (do-sub args new-sub-list) (cps-traverse/sub body new-sub-list))))
     (($ let/k ($ value/k ($ cps _ kont kont-name)) vars vals)
      (let ((new-sub-list (subproc vars sub-list)))
        ;; Leave the value substitution to beta-reduction
@@ -119,7 +124,7 @@
         (make-seq/k
          end-cont kont-name
          (cps-traverse/sub kont subproc new-sub-list))
-        (subproc vars sub-list)
+        (do-sub vars sub-list)
         vals)))
     (($ list/k ($ value/k ($ cps _ kont kont-name)) size lst)
      (make-list/k
@@ -138,20 +143,34 @@
       (cps-traverse/sub cnd subproc sub-list)
       (cps-traverse/sub true subproc sub-list)
       (cps-traverse/sub false subproc sub-list)))
+    ;; TODO: Add rest CPS cases
     (else expr)))
 
+;; capture-free substitution
+;; Some people would say capture-avoiding substitution, same term here.
+;; The algorithm is simple:
+;; 1, If a var is bound, then don't substitute.
+;; 2. If a var is free-var of the sub-expr, then rename it in sub-expr before  substitution.
+;; 3. If a var is the var to substitute, then substitute it.
+;; NOTE: We don't do the value substitution here, just replace the variables.
+;;       The value substitution should delay to beta-reduction.
 (define (cfs expr sub-list)
-  (define (filter-bound-var bound-vars sub-list)
+  (define (filter-bound-var expr bound-vars sub-list)
     (filter-map (lambda (v)
-                  (if (memq (car v) bound-vars)
-                      #f
-                      v))
+                  (cond
+                   ((memq (car v) bound-vars)
+                    #f)
+                   ((free-var? expr (car v))
+                    (cons (rename (car v)) (cdr v)))
+                   (else
+                    (or (assoc-ref sub-list (car v))
+                        (car v)))))
                 sub-list))
   (cps-traverse/sub expr filter-bound-var sub-list))
 
 (define (alpha-renaming expr origins renames)
   ;; sub-list -> ((var . sub) sub-list)
-  (define (renaming vars sub-list)
+  (define (renaming _ vars sub-list)
     (fold (lambda (v p)
             (cons (or (assoc-ref sub-list v)
                       v)
