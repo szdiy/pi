@@ -111,6 +111,7 @@
                v))
          vars))
   (match expr
+    ((or (? end/k?) (? imm/k?)) expr) ; immediate value can't be subsituted
     ;; value cps
     (($ lambda/k ($ value/k ($ cps _ kont kont-name)) kont-arg args body)
      (let ((new-sub-list (subproc args sub-list)))
@@ -131,7 +132,6 @@
       (cps-traverse/sub kont subproc sub-list) kont-name
       size
       (map (lambda (e) (cps-traverse/sub e subproc sub-list)) lst)))
-    ((or (? end/k?) (? imm/k?)) expr) ; immediate value can't be subsituted
     ;; common cps
     (($ seq/k ($ cps _ kont kont-name) body)
      (make-seq/k
@@ -168,6 +168,7 @@
                 sub-list))
   (cps-traverse/sub expr filter-bound-var sub-list))
 
+;; renames -> symbol-list
 (define (alpha-renaming expr origins renames)
   ;; sub-list -> ((var . sub) sub-list)
   (define (renaming _ vars sub-list)
