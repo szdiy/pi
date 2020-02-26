@@ -96,28 +96,29 @@
 
 
 (define-syntax-rule (type-check o preds ...)
-  (or (any (lambda (p) (p o)) preds ...)
+  (or (any (lambda (p) (p o)) (list preds ...))
       (throw 'pi-error
              (format #f "Wrong type, expect ~{`~a'~^,~}"
-                     'preds ...))))
+                     (list 'preds ...)))))
 
 (define-syntax define-typed-record
   (syntax-rules (parent fields)
-    ((_ tr (parent p) (fields (f t) ...))
-     (define-record-type tr (parent p)
-       (fields f ...)
+    ((_ tr (parent p) (fields (f t t* ...) ...))
+     (define-record-type tr
+       (parent p)
+       (fields (mutable f) ...)
        (protocol
         (lambda (new)
           (lambda (f ...)
-            (type-check f t) ...
+            (type-check f t t* ...) ...
             (new f ...))))))
     ((_ tr (fields (f t t* ...) ...))
      (define-record-type tr
-         (fields f ...)
+       (fields (mutable f) ...)
        (protocol
         (lambda (new)
           (lambda (f ...)
-            (type-check f t) ...
+            (type-check f t t* ...) ...
             (new f ...))))))))
 
 (define (make-object-list-pred lst check)

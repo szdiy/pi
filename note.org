@@ -1,0 +1,51 @@
+* Terms
+** Weak beta reduction
+The abstract won't be further reduced, or the abstract is treated as normal form. Same meaning.
+** Full beta reduction
+All possible orders can be sound.
+** Normalization
+Performing beta and eta reduction to archieve normal forms.
+* CPS
+** Benefit
+1. All exprs in arguments are transformed to atomics (variables & constants).
+   - This is good for assembly: application or abstract can't be in argument when the program to assembly.
+   - CPS is suit for Von Neumann machine.
+2.
+* Compiling optimizings
+** Dead variable elimination
+If variable a is not free in M, and no one uses a, then we eliminate the binding of a.
+** Dead code elimination
+There're situations:
+case-1: If k is a continuation, and k doesn't dorminate any subtree, then we eliminate the binding of k.
+case-2: Let's say c is the cnd of a branch, if c is permantly true or false, then the alternative branch k can be eliminated by case-1.
+** Constant folding
+If:
+1. i is constant and not free in M
+2. p is primitive
+Then:
+i or p(i) can be folded as a constant.
+Fold: substitute i in M first, then pass the result to the continuation.
+** Copy propagation
+*** Functions
+If each continuation was named, then the copy-propagation of functions can be done by eta-reduction.
+E.g:
+#+BEGIN_SRC scheme
+(let* ((f (lambda (x) (* x x)))
+       (h (lambda (x) (f x)))
+       (g (lambda (x k) (+ x (k 9)))))
+  (+ 3 (g 8 h)))
+;; h = f
+;; 3 + 8 + h(9)
+#+END_SRC
+We've noticed that h is actually the abstraction of f, so it obviously can be reduced by eta-reduction.
+#+BEGIN_SRC scheme
+(let* ((f (lambda (x) (* x x)))
+       (g (lambda (x) (+ x (k 9)))))
+  (+ 3 (g 8 f)))
+;; 3 + 8 + f(9)
+#+END_SRC
+** Inlining
+If M is bound to a function f, then substitute f with M in the continuation, and remove the definition of f.
+** About side-effects
+1. The side-effects in syntax won't be able to affect the optimizings, because they're explicit in the syntax, so we can handle them.
+2. Only side-effects in pritimitives should be considered.

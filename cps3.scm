@@ -1,5 +1,6 @@
 (import (ice-9 match)
         (ice-9 pretty-print)
+        (ice-9 regex)
         (srfi srfi-1)
         (rnrs)
         (pi primitives)
@@ -25,9 +26,12 @@
 ;; 6. The redundant eta-redex can be reduced by introducing a function call in translation pass.
 (define-typed-record cps
   (fields
-   (kont cps?) ; current continuation
-   (kont-name symbol?) ; the id of the continuation
-   ))
+   ;; The next computation will be bound to kont, which is known as the `current continuation'
+   ;; NOTE: The current cps is the next continuation
+   (kont cps?)
+   (name symbol?)
+   ;; The result of the current expr will be bound to karg, and be passed to kont
+   (karg symbol?)))
 
 (define-typed-record end/k
   (fields (kont-name symbol?)))
@@ -150,10 +154,10 @@
 ;; Some people would say capture-avoiding substitution, same term here.
 ;; The algorithm is simple:
 ;; 1, If a var is bound, then don't substitute.
-;; 2. If a var is free-var of the sub-expr, then rename it in sub-expr before  substitution.
+;; 2. If a var is free-var of the sub-expr, then rename it in sub-expr before substitution.
 ;; 3. If a var is the var to substitute, then substitute it.
-;; NOTE: We don't do the value substitution here, just replace the variables.
-;;       The value substitution should delay to beta-reduction.
+;; NOTE: We don't substitute constants here, just replace the variables.
+;;       The substitution of constants should delay to beta-reduction.
 (define (cfs expr sub-list)
   (define (filter-bound-var expr bound-vars sub-list)
     (filter-map (lambda (v)
@@ -266,14 +270,34 @@
       (cfs false sub-list)))
     (else expr)))
 
-(define* (expr->cps expr #:optional (kont end-cont))
+;; string -> boolean
+(define (validate-identifier id-str)
+  (cond
+   ((or (string=? id-str ".")
+        (regex-match "#*" id-str))
+    (throw 'pi-error "`~a' is invalid identifier!" id-str))
+   (else #t)))
+
+;; expr -> boolean
+(define (identifier? expr)
+  (and (symbol? expr)
+       (validate-identifier expr)))
+
+(define (is-value? expr)
+  (or (identifier? expr)
+      (constant? expr)))
+
+(define (cps-apply cps expr)
+  ;; TODO: apply cps form as a continuation on expr
+  )
+
+(define* (%expr->cps expr #:optional (kont end-cont))
   ;; With respect to security, we need to add "\" to each variable name, in case
   ;; it conflicts with the kont-arg name by intended constructing.
   (define (fix-var x) (symbol-append '## x))
   ;;(format #t "$$$$$$ ~a       ~a~%" expr kont)
   (match expr
-    ((? atom?) (cps-comp expr kont))
-    ((? var?) (cps-comp expr kont))
+    ((? is-value?) (cps-apply kont expr))
     (('lambda (args ...) body ...)
      (make-lambda/k
       (newsym "lambda/k-") end-cont
@@ -327,8 +351,8 @@
         false-branch)))
     (((? is-op-a-primitive? p) args ...)
      (make-prim-app/k
-      (cps-kont-name kont) kont
-      (symbol->primitive p)
+      (newsym "prim-app/k") kont (newsym "karg-")
+      p
       (map (lambda (e) (expr->cps e kont)) args)))
     ((e1 e2 ...)
      (let ((func (expr->cps e1 kont))
@@ -339,3 +363,19 @@
         args)))
     (else (throw 'pi-error expr->cps
                  "Invalid expr " expr))))
+
+;; memoiazation for quick cps reduction and flatten
+(define *cps-lookup-table* (make-hash-table))
+
+(define-record-type cps-info
+  (fields
+   (cps cps?)
+   (cnt integer?)))
+
+;; cps -> cps
+(define (cps-register! cps)
+  (let ((info (make-cps-info cps 0)))
+    (hash-set! *cps-lookup-table* (cps-name cps) info)))
+
+(define (expr->cps expr #:optional (kont end-cont))
+  (cps-register! (%expr->cps kont)))
