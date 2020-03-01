@@ -10,14 +10,15 @@ Performing beta and eta reduction to archieve normal forms.
 1. All exprs in arguments are transformed to atomics (variables & constants).
    - This is good for assembly: application or abstract can't be in argument when the program to assembly.
    - CPS is suit for Von Neumann machine.
-2.
-* Compiling optimizings
-** Dead variable elimination
-If variable a is not free in M, and no one uses a, then we eliminate the binding of a.
-** Dead code elimination
-There're situations:
-case-1: If k is a continuation, and k doesn't dorminate any subtree, then we eliminate the binding of k.
+2. ANF or Monads leads to O(n^2) in worse case because of commuting conversions.
+   While CPS only nees O(n) according to Appel & Jim 1992.
 case-2: Let's say c is the cnd of a branch, if c is permantly true or false, then the alternative branch k can be eliminated by case-1.
+** Transformation
+1. CPS has no standard transformation algorithm, so it was hard to use. But after many reserchers' efforts, there're some good transformations were found.
+2. In compilation, it's uncessary to use full-CPS which demands primitives are in CPS, so we have to seperate them:
+   - In primitives application: (p e) => \k.(k (p e))
+   - In functions application: (f e) => \k.(f' k e)
+3. The function must be defined as a dedicated form, lambda or record-type. It's impossible to recognize.
 ** Constant folding
 If:
 1. i is constant and not free in M
