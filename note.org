@@ -1,52 +1,106 @@
+#+LATEX_CLASS: article
+#+STARTUP: latexpreview
+#+LANGUAGE: en
+#+OPTIONS: toc:nil
+#+OPTIONS: latex:t
+
+#+LATEX_CLASS_OPTIONS: [a4paper,12pt,twocolumn]
+
+#+LATEX_HEADER: \usepackage[lite,subscriptcorrection,slantedGreek,nofontinfo]{mtpro2}
+#+LATEX_HEADER: \usepackage{listings}
+#+LATEX_HEADER: \usepackage{color}
+#+LATEX_HEADER: \usepackage{amsmath}
+#+LATEX_HEADER: \lstset{language=Scheme,frame=lines}
+#+LATEX_HEADER: \definecolor{codegreen}{rgb}{0,0.6,0}
+#+LATEX_HEADER: \definecolor{codegray}{rgb}{0.5,0.5,0.5}
+#+LATEX_HEADER: \definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+#+LATEX_HEADER: \title{Compile with CPS}
+
+#+LATEX_HEADER: \author{Nala Ginrut}
+
+#+AUTHOR:
+#+DATE:
+#+LATEX_HEADER: \maketitle
+
+#+EXPORT_SELECT_TAGS: export
+#+EXPORT_EXCLUDE_TAGS: noexport
+#+STARTUP: indent
+
 * Terms
 ** Weak beta reduction
-The abstract won't be further reduced, or the abstract is treated as normal form. Same meaning.
+   The abstract won't be further reduced, or the abstract is treated as normal form. Same meaning.
 ** Full beta reduction
-All possible orders can be sound.
+   All possible orders can be sound.
 ** Normalization
-Performing beta and eta reduction to archieve normal forms.
+   Performing beta and eta reduction to archieve normal forms.
+** Unbox
+Represent the value with a single CPU machine word in replace of a pointer.
+* Design
+** Primitive types
+*** Integer
+- unboxed
+-
 * CPS
+** CPS vs. ANF
+
+|     | what's k                 | beta                       |   |   |
+|-----+--------------------------+----------------------------+---+---|
+| CPS | a continuation wrapped   | $O(n)$ for linear scan     |   |   |
+|     | an expr which computes   |                            |   |   |
+|     | the result               |                            |   |   |
+|-----+--------------------------+----------------------------+---+---|
+| ANF | a var bounded the result | $O(n^2)$ in the worse case   |   |   |
+|     | of a trival expr         |                            |   |   |
+|-----+--------------------------+----------------------------+---+---|
+
 ** Benefit
-1. All exprs in arguments are transformed to atomics (variables & constants).
-   - This is good for assembly: application or abstract can't be in argument when the program to assembly.
-   - CPS is suit for Von Neumann machine.
-2. ANF or Monads leads to O(n^2) in worse case because of commuting conversions.
-   While CPS only nees O(n) according to Appel & Jim 1992.
-case-2: Let's say c is the cnd of a branch, if c is permantly true or false, then the alternative branch k can be eliminated by case-1.
+   1. All exprs in arguments are transformed to atomics (variables & constants).
+      - This is good for assembly: application or abstract can't be in argument when the program to assembly.
+      - CPS is suit for Von Neumann machine.
+   2. ANF or Monads leads to O(n^2) in worse case because of commuting conversions.
+      - While CPS only needs O(n) according to Appel & Jim 1992.
+
+   case-2: Let's say c is the cnd of a branch, if c is permantly true or false, then the alternative branch k can be eliminated by case-1.
 ** Transformation
-1. CPS has no standard transformation algorithm, so it was hard to use. But after many reserchers' efforts, there're some good transformations were found.
-2. In compilation, it's uncessary to use full-CPS which demands primitives are in CPS, so we have to seperate them:
-   - In primitives application: (p e) => \k.(k (p e))
-   - In functions application: (f e) => \k.(f' k e)
-3. The function must be defined as a dedicated form, lambda or record-type. It's impossible to recognize.
+   1. CPS has no standard transformation algorithm, so it was hard to use. But after many reserchers' efforts, there're some good transformations were found.
+   2. In compilation, it's uncessary to use full-CPS which demands primitives are in CPS, so we have to seperate them:
+      - In primitives application: $(p\ e)$ => $\lambda k.\ (k\ (p\ e))$
+      - In functions application: $(f\ e)$ => $\lambda k.\ (f'\ k\ e)$
+
+   3. The function must be defined as a dedic4ated form, lambda or record-type. It's impossible to recognize.
+** Compiling process
+*** expr->cps
+*** normalize
+*** closure-conversion
 ** Constant folding
-If:
-1. i is constant and not free in M
-2. p is primitive
-Then:
-i or p(i) can be folded as a constant.
-Fold: substitute i in M first, then pass the result to the continuation.
+   If:
+   1. i is constant and not free in M
+   2. p is primitive
+   Then:
+   i or p(i) can be folded as a constant.
+   Fold: substitute i in M first, then pass the result to the continuation.
 ** Copy propagation
 *** Functions
 If each continuation was named, then the copy-propagation of functions can be done by eta-reduction.
 E.g:
-#+BEGIN_SRC scheme
-(let* ((f (lambda (x) (* x x)))
-       (h (lambda (x) (f x)))
-       (g (lambda (x k) (+ x (k 9)))))
-  (+ 3 (g 8 h)))
-;; h = f
-;; 3 + 8 + h(9)
-#+END_SRC
+    #+BEGIN_SRC scheme :exports code
+    (let* ((f (lambda (x) (* x x)))
+          (h (lambda (x) (f x)))
+          (g (lambda (x k) (+ x (k 9)))))
+      (+ 3 (g 8 h)))
+      ;; h = f
+      ;; 3 + 8 + h(9)
+    #+END_SRC
+
 We've noticed that h is actually the abstraction of f, so it obviously can be reduced by eta-reduction.
-#+BEGIN_SRC scheme
-(let* ((f (lambda (x) (* x x)))
-       (g (lambda (x) (+ x (k 9)))))
-  (+ 3 (g 8 f)))
-;; 3 + 8 + f(9)
-#+END_SRC
+    #+BEGIN_SRC scheme :exports code
+    (let* ((f (lambda (x) (* x x)))
+           (g (lambda (x) (+ x (k 9)))))
+      (+ 3 (g 8 f)))
+    ;; 3 + 8 + f(9)
+    #+END_SRC
 ** Inlining
-If M is bound to a function f, then substitute f with M in the continuation, and remove the definition of f.
+   If M is bound to a function f, then substitute f with M in the continuation, and remove the definition of f.
 ** About side-effects
-1. The side-effects in syntax won't be able to affect the optimizings, because they're explicit in the syntax, so we can handle them.
-2. Only side-effects in pritimitives should be considered.
+   1. The side-effects in syntax won't be able to affect the optimizings, because they're explicit in the syntax, so we can handle them.
+   2. Only side-effects in pritimitives should be considered.
