@@ -2,57 +2,7 @@
         (srfi srfi-1))
 
 (define (prim? p)
-  (memq p '(+ - * /)))
-
-(define* (expr->cps expr #:optional (cont '(lambda (x) x)))
-  (match expr
-    (('lambda (v ...) body)
-     (let ((k cont)
-           (karg (gensym "k"))
-           (x (gensym "x"))
-           (m (gensym "m")))
-       `(,k (lambda (,x ,karg)
-              (,(expr->cps body) (lambda (,m) (,k ,m)))))
-       #;
-       `((lambda (,k ,@v)               ;
-       ,(map (lambda (e) (expr->cps e k)) body)) ;
-       ,cont)
-
-       #;`(,cont ,(map (lambda (e) (expr->cps e k)) body))
-       ))
-    (('if cnd b1 b2)
-     (let ((karg (gensym "k"))
-           (tb (expr->cps b1 cont))
-           (fb (expr->cps b2 cont)))
-       `(lambda (,karg) (if ,cnd ,tb ,fb))))
-    ((f e ...)
-     (let* ((fn (gensym "f"))
-            (el (map (lambda (_) (gensym "x")) e))
-            (m (gensym "m"))
-            (k cont)
-            (f-expr `(,fn ,@el))
-            (kf (gensym "k")))
-       `(,k (,(expr->cps f)
-             (lambda (,fn)
-               ,(fold (lambda (ee ex p) `(,(expr->cps ee) (lambda (,ex) ,p)))
-                      `(,(if (prim? f)
-                             `(,k (,fn ,@el))
-                             `((lambda (,kf ,@el) (,kf (,fn ,@el))) ,k ,@el))
-                        (lambda (,m) (,k ,m)))
-                      e el))))
-       #;
-       `(,cont ,(expr->cps e `(lambda (,x ,fn) ;
-       ,(if (null? e*)                  ;
-       `(,fn ,((expr->cps fn cont) ,x)) ;
-       (let ((x* (gensym "x")))         ;
-       `(lambda (,x* ,fn)               ;
-       `(,fn ,((expr->cps fn cont) ,x ,x*))))))))
-       #;
-       (expr->cps f (map (lambda (x t)  ; ;
-       `(lambda (,fn)                   ; ;
-       ,(expr->cps x `(lambda (,t) (,fn ,t ,cont))))) ; ;
-       e el))))
-    (else `(,cont ,expr))))
+  (memq p '(+ - * / add)))
 
 ;; capture free substitute
 (define (cfs expr args el)
@@ -94,3 +44,63 @@
      (display "eta-1\n")
      (normalize `(,(normalize f) ,@(normalize rest))))
     (else expr)))
+
+(define (apply-cps expr cont)
+  (normalize (pk "apply" `(,cont ,expr))))
+
+(define (comp-cps expr cont)
+  (match expr
+
+    (else (apply-cps expr cont))))
+
+(define* (expr->cps expr #:optional (cont 'id #;'(lambda (x) x)
+                                          ))
+  (match expr
+    (('lambda (v ...) body)
+     (let ((f (gensym "f")) (j (gensym "k")))
+       `(letval ((,f (lambda (,j ,@v) ,(expr->cps body j))))
+                (,cont ,f))))
+    (('define func body)
+     `(fix ,func ,(expr->cps body cont)))
+    (('if cnd b1 b2)
+     (let ((tb (expr->bool (simple-expr->value cnd)))
+           (fb (expr->cps b2 cont))
+           (ck (expr->cps cnd cont)))
+       `(if ,ck ,tb ,fb)))
+    ((f e ...)
+     (let* ((fn (gensym "f"))
+            (el (map (lambda (_) (gensym "x")) e))
+            (m (gensym "m"))
+            (k cont)
+            (f-expr `(,fn ,@el))
+            (kf (gensym "k")))
+       (comp-cps f
+                 `(lambda (,fn)
+                    ,(fold (lambda (ee ex p) (comp-cps ee `(lambda (,ex) ,p)))
+                           (if (prim? f)
+                               `(,cont (,fn ,@el))
+                               `(,fn ,cont ,@el))
+                           e el)))
+       #;
+       `(,k (,(expr->cps f)             ;
+       (lambda (,fn)                    ;
+       ,(fold (lambda (ee ex p) `(,(expr->cps ee) (lambda (,ex) ,p))) ;
+       `(,(if (prim? f)                 ;
+       `(,k (,fn ,@el))                 ;
+       `((lambda (,kf ,@el) (,kf (,fn ,@el))) ,k ,@el)) ;
+       (lambda (,m) (,k ,m)))           ;
+       e el))))
+       #;
+       `(,cont ,(expr->cps e `(lambda (,x ,fn) ; ;
+       ,(if (null? e*)                  ; ;
+       `(,fn ,((expr->cps fn cont) ,x)) ; ;
+       (let ((x* (gensym "x")))         ; ;
+       `(lambda (,x* ,fn)               ; ;
+       `(,fn ,((expr->cps fn cont) ,x ,x*))))))))
+       #;
+       (expr->cps f (map (lambda (x t)  ; ; ;
+       `(lambda (,fn)                   ; ; ;
+       ,(expr->cps x `(lambda (,t) (,fn ,t ,cont))))) ; ; ;
+       e el))))
+    (('begin e ...) (map expr->cps e))
+    (else `(,cont ,expr))))

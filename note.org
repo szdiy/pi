@@ -37,21 +37,43 @@
 Represent the value with a single CPU machine word in replace of a pointer.
 * Design
 ** Primitive types
+All primitive types are wrapped into cps-value
 *** Integer
 - unboxed
--
+*** String
+- char buf (boxed)
+*** Container
+- string, vector, list, pair
+- cps-container
+** Branch
+
 * CPS
+** Two flavors CPS
+*** Higher order CPS
+*** First order CPS
 ** CPS vs. ANF
 
-|     | what's k                 | beta                       |   |   |
-|-----+--------------------------+----------------------------+---+---|
-| CPS | a continuation wrapped   | $O(n)$ for linear scan     |   |   |
-|     | an expr which computes   |                            |   |   |
-|     | the result               |                            |   |   |
-|-----+--------------------------+----------------------------+---+---|
-| ANF | a var bounded the result | $O(n^2)$ in the worse case   |   |   |
-|     | of a trival expr         |                            |   |   |
-|-----+--------------------------+----------------------------+---+---|
+|     | what's k                 | shrinking reduction         |   |   |
+|-----+--------------------------+-----------------------------+---+---|
+| CPS | a continuation wrapped   | $O(n)$ for linear reduction  |   |   |
+|     | an expr which computes   |                             |   |   |
+|     | the result               |                             |   |   |
+|-----+--------------------------+-----------------------------+---+---|
+| ANF | a var bounded the result | $O(n^2)$ in the worse case    |   |   |
+|     | of a trival expr         | commuting conversion        |   |   |
+|-----+--------------------------+-----------------------------+---+---|
+
+** CPS vs. Monads
+
+|        | what's k                 | shrinking reduction         |   |   |
+|--------+--------------------------+-----------------------------+---+---|
+| CPS    | a continuation wrapped   | $O(n)$ for linear reduction  |   |   |
+|        | an expr which computes   |                             |   |   |
+|        | the result               |                             |   |   |
+|--------+--------------------------+-----------------------------+---+---|
+| Monads |                          | $O(n^2)$ in the worse case    |   |   |
+|        |                          | commuting conversion        |   |   |
+|--------+--------------------------+-----------------------------+---+---|
 
 ** Benefit
    1. All exprs in arguments are transformed to atomics (variables & constants).
@@ -67,11 +89,22 @@ Represent the value with a single CPU machine word in replace of a pointer.
       - In primitives application: $(p\ e)$ => $\lambda k.\ (k\ (p\ e))$
       - In functions application: $(f\ e)$ => $\lambda k.\ (f'\ k\ e)$
 
-   3. The function must be defined as a dedic4ated form, lambda or record-type. It's impossible to recognize.
+   3. The function must be defined as a dedicated form, lambda or record-type. It's impossible to recognize.
+   4. One-pass: Doesn't introduce /administrative redex/
+   5. According to Kennedy's transform algorithm, we need two converters:
+      - 1. expr->cps which takes the continuation as a symbol for its own name
+      - 2. cps-comp which takes the continuation as an actual context that can
+           be applied in the translation-time.
+** CPS design
+1. Distinct value-cps and cont-cps
+2. Args are just one list
+3. Pair and List derives from the same record cps-container
 ** Compiling process
 *** expr->cps
 *** normalize
 *** closure-conversion
+*** contification
+function calling -> local control-flow
 ** Constant folding
    If:
    1. i is constant and not free in M
