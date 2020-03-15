@@ -95,6 +95,13 @@ All primitive types are wrapped into cps-value
       - 1. expr->cps which takes the continuation as a symbol for its own name
       - 2. cps-comp which takes the continuation as an actual context that can
            be applied in the translation-time.
+      The point is to isolate the /administrative redex/ introduced in the translation-time to cps-comp, then eliminate them during the CPS translation.
+   6. Make a syntactic distinction between:
+     1. /functions/
+        - Could be the heap-allocated clousre
+        - Can be transformed to continuation by /contification/
+     2. /local continuations/
+        Could always be the inlined code with jumps
 ** CPS design
 1. Distinct value-cps and cont-cps
 2. Args are just one list

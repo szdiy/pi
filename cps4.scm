@@ -49,12 +49,12 @@
   (normalize (pk "apply" `(,cont ,expr))))
 
 (define (comp-cps expr cont)
-  (match expr
+  (expr->cps expr cont)
+  #;
+  (match expr                           ;
+  (else (apply-cps expr cont))))
 
-    (else (apply-cps expr cont))))
-
-(define* (expr->cps expr #:optional (cont 'id #;'(lambda (x) x)
-                                          ))
+(define* (expr->cps expr #:optional (cont 'init-cont))
   (match expr
     (('lambda (v ...) body)
      (let ((f (gensym "f")) (j (gensym "k")))
@@ -63,7 +63,7 @@
     (('define func body)
      `(fix ,func ,(expr->cps body cont)))
     (('if cnd b1 b2)
-     (let ((tb (expr->bool (simple-expr->value cnd)))
+     (let ((tb (expr->cps expr cont))
            (fb (expr->cps b2 cont))
            (ck (expr->cps cnd cont)))
        `(if ,ck ,tb ,fb)))
@@ -80,27 +80,6 @@
                            (if (prim? f)
                                `(,cont (,fn ,@el))
                                `(,fn ,cont ,@el))
-                           e el)))
-       #;
-       `(,k (,(expr->cps f)             ;
-       (lambda (,fn)                    ;
-       ,(fold (lambda (ee ex p) `(,(expr->cps ee) (lambda (,ex) ,p))) ;
-       `(,(if (prim? f)                 ;
-       `(,k (,fn ,@el))                 ;
-       `((lambda (,kf ,@el) (,kf (,fn ,@el))) ,k ,@el)) ;
-       (lambda (,m) (,k ,m)))           ;
-       e el))))
-       #;
-       `(,cont ,(expr->cps e `(lambda (,x ,fn) ; ;
-       ,(if (null? e*)                  ; ;
-       `(,fn ,((expr->cps fn cont) ,x)) ; ;
-       (let ((x* (gensym "x")))         ; ;
-       `(lambda (,x* ,fn)               ; ;
-       `(,fn ,((expr->cps fn cont) ,x ,x*))))))))
-       #;
-       (expr->cps f (map (lambda (x t)  ; ; ;
-       `(lambda (,fn)                   ; ; ;
-       ,(expr->cps x `(lambda (,t) (,fn ,t ,cont))))) ; ; ;
-       e el))))
+                           e el)))))
     (('begin e ...) (map expr->cps e))
     (else `(,cont ,expr))))
