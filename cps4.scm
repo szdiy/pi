@@ -88,42 +88,28 @@
                       (letcont ((,k1 (lambda (,x1) ,(expr->cps b1 j))))
                         (letcont ((,k2 (lambda (,x2) ,(expr->cps b2 j))))
                           (if ,k ,k1 ,k2))))))))
-    (('collection type e ...)
-     (let ((v (gensym "x"))
-           (ex (map (lambda (_) (gensym "e")) e)))
-       (fold (lambda (ee ex p)
-               (comp-cps ee `(lambda (,ex) ,p)))
-             `(letval ((,v (,type ,@ex)))
-                (,cont ,v))
-             e ex)))
-    (('begin e ...) (map (lambda (x) (comp-cps x cont)) e))
-    ((? atom? expr)
-     (let ((x (gensym "x")))            ;
-       `(letval ((,x ,expr)) (,cont ,x))))
-    ((? id? expr) `(,cont ,expr))
-    ((f e ...)
-     (let* ((fn (gensym "f"))
-            (el (map (lambda (_) (gensym "x")) e))
-            (m (gensym "m"))
-            (k cont)
-            (f-expr `(,fn ,@el))
-            (kf (gensym "k"))
-            (j (gensym "k"))
-            (jx (gensym "x")))
-       (comp-cps f
-                 `(lambda (,fn)
-                    ,(fold (lambda (ee ex p) (comp-cps ee `(lambda (,ex) ,p)))
-                           ;; NOTE: The application of comp-cps won't appear in
-                           ;;       tail call position, so we have to keep this
-                           ;;       local continuation
-                           `(letcont ((j (lambda (,jx) (,cont ,jx))))
-                              ,(if (prim? f)
-                                   `(,j (,fn ,@el))
-                                   `(,fn ,j ,@el)))
-                           e el)))))
-    (else
-     #;(apply-cps expr cont)
-     (throw 'comp-cps "wrong expr:" expr))))
+    #;
+    ((f e ...)                          ;
+    (let* ((fn (gensym "f"))            ;
+    (el (map (lambda (_) (gensym "x")) e)) ;
+    (m (gensym "m"))                    ;
+    (k cont)                            ;
+    (f-expr `(,fn ,@el))                ;
+    (kf (gensym "k"))                   ;
+    (j (gensym "k"))                    ;
+    (jx (gensym "x")))                  ;
+    (comp-cps f                         ;
+    `(lambda (,fn)                      ;
+    ,(fold (lambda (ee ex p) (comp-cps ee `(lambda (,ex) ,p))) ;
+    ;; NOTE: The application of comp-cps won't appear in ;
+    ;;       tail call position, so we have to keep this ;
+    ;;       local continuation ;
+    `(letcont ((,j (lambda (,jx) (,cont ,jx)))) ;
+    ,(if (prim? f)                      ;
+    `(,j (,fn ,@el))                    ;
+    `(,fn ,j ,@el)))                    ;
+    e el)))))
+    (else (expr->cps expr cont))))
 
 (define* (expr->cps expr #:optional (cont 'init-cont))
   (match expr
