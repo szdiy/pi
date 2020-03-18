@@ -46,7 +46,15 @@ All primitive types are wrapped into cps-value
 - string, vector, list, pair
 - cps-container
 ** Branch
+** Collection
+cons, list, vector
+#+begin_src scheme
+(define-record-type cps-collection
+  (fields
 
+  )
+#+end_src
+** String
 * CPS
 ** Two flavors CPS
 *** Higher order CPS
@@ -97,11 +105,15 @@ All primitive types are wrapped into cps-value
            be applied in the translation-time.
       The point is to isolate the /administrative redex/ introduced in the translation-time to cps-comp, then eliminate them during the CPS translation.
    6. Make a syntactic distinction between:
-     1. /functions/
-        - Could be the heap-allocated clousre
-        - Can be transformed to continuation by /contification/
-     2. /local continuations/
-        Could always be the inlined code with jumps
+      1. /functions/
+         - Could be the heap-allocated clousre
+         - Can be transformed to continuation by /contification/
+      2. /local continuations/
+         Could always be the inlined code with jumps
+   7. CPS optimization
+      1. CPS is inefficient, we have to optimize it before next step
+   8. Closure introducing
+      2. Closure conversion
 ** CPS design
 1. Distinct value-cps and cont-cps
 2. Args are just one list
@@ -112,14 +124,17 @@ All primitive types are wrapped into cps-value
 *** closure-conversion
 *** contification
 function calling -> local control-flow
-** Constant folding
-   If:
+** Compiling optimizing
+*** Partial evaluation
+*** Constant folding
+If:
    1. i is constant and not free in M
    2. p is primitive
-   Then:
+Then:
    i or p(i) can be folded as a constant.
-   Fold: substitute i in M first, then pass the result to the continuation.
-** Copy propagation
+
+Fold: substitute i in M first, then pass the result to the continuation.
+*** Copy propagation
 *** Functions
 If each continuation was named, then the copy-propagation of functions can be done by eta-reduction.
 E.g:
@@ -139,8 +154,23 @@ We've noticed that h is actually the abstraction of f, so it obviously can be re
       (+ 3 (g 8 f)))
     ;; 3 + 8 + f(9)
     #+END_SRC
-** Inlining
-   If M is bound to a function f, then substitute f with M in the continuation, and remove the definition of f.
+*** Inlining
+If we do beta-reduction on the function that only applied once in the context, then we can remove the definition of this function. This is called function-inlining.
+Steps:
+1. if M is bound to a function f
+2. substitute f with M in the continuation
+3. remove the definition of f.
+*NOTE:* Usually, there must be an alpha-renaming step to make sure every variable is unique, however, our CPS transformation has renamed each variable, so it's fine.
+*** Dead variable elimination
+There're three conditions, if a variable:
+1. won't raise an exception (by primitive type checking)
+2. can't be modified (immutable)
+3. never used
+iff 1,2,3 meet, then this variable could be removed.
+
+*** Flatten arguments
+*** Flatten collection
+*** Dropping unused arguments
 ** About side-effects
    1. The side-effects in syntax won't be able to affect the optimizings, because they're explicit in the syntax, so we can handle them.
    2. Only side-effects in pritimitives should be considered.
