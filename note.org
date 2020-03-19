@@ -133,7 +133,19 @@ If:
 Then:
    i or p(i) can be folded as a constant.
 
-Fold: substitute i in M first, then pass the result to the continuation.
+*Fold:* substitute i in M first, then pass the result to the continuation.
+**** Arithmetic constant folding
+*Exampt:* The arithmetic operation will raise an exception. For example, $1\div0$
+Possible pattern:
+1. elementary arithmetic
+2. length function
+3. logic arithmetic
+4. char->integer
+**** String constant folding
+**** Comparison constant folding
+1. Operands are integer
+2. The function is comparison operator
+Can be further folding branching CPS in [[Dead code elimination]].
 *** Copy propagation
 *** Functions
 If each continuation was named, then the copy-propagation of functions can be done by eta-reduction.
@@ -168,9 +180,15 @@ There're three conditions, if a variable:
 3. never used
 iff 1,2,3 meet, then this variable could be removed.
 
+*** Dead code elimination
 *** Flatten arguments
 *** Flatten collection
 *** Dropping unused arguments
+*** Analysis of operation on the store
+An assignment into the store followed by a fetch from the same location can be analyzed, eliminating the fetch.
+1. fetch
+2. store
+Then fetch can be eliminated. This should be worth for embedded system.
 ** About side-effects
    1. The side-effects in syntax won't be able to affect the optimizings, because they're explicit in the syntax, so we can handle them.
    2. Only side-effects in pritimitives should be considered.
