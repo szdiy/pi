@@ -120,7 +120,11 @@ cons, list, vector
 3. Pair and List derives from the same record cps-container
 ** Compiling process
 *** expr->cps
+*** Shrink
 *** normalize
+**** Eta-reduction
+**** Beta-reduction
+*** Micro Pass (optimizing)
 *** closure-conversion
 *** contification
 function calling -> local control-flow
@@ -172,7 +176,7 @@ Steps:
 1. if M is bound to a function f
 2. substitute f with M in the continuation
 3. remove the definition of f.
-*NOTE:* Usually, there must be an alpha-renaming step to make sure every variable is unique, however, our CPS transformation has renamed each variable, so it's fine.
+*NOTE:* Usually, there must be an alpha-renaming step to make sure every variable is unique. Our CPS transformation has renamed each *fresh variable*, however, the original variable is not renamed.
 *** Dead variable elimination
 There're three conditions, if a variable:
 1. won't raise an exception (by primitive type checking)
@@ -189,6 +193,8 @@ An assignment into the store followed by a fetch from the same location can be a
 1. fetch
 2. store
 Then fetch can be eliminated. This should be worth for embedded system.
+*** Uncurrying
+IMO, cps-fv is easier after uncurrying.
 ** About side-effects
    1. The side-effects in syntax won't be able to affect the optimizings, because they're explicit in the syntax, so we can handle them.
    2. Only side-effects in pritimitives should be considered.
