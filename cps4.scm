@@ -27,12 +27,19 @@
 (define (bind-special-form? x)
   (memq x '(letcont let letcst letval)))
 
+(define (lambda-desugar cps)
+  (match cps
+    (((? bind-special-form?) ((v e)) body)
+     `((lambda (,v) ,body) ,e))
+    (else cps)))
+
+(define (lambda-sugarize cps body)
+  (match cps
+    (((? bind-special-form? sf) ((v e)) body)
+     `(sf ((,v ,e)) ))
+    (else cps)))
+
 (define (vars-fold rec acc cps)
-  (define (lambda-desugar cps)
-    (match cps
-      (((? bind-special-form??) ((v e)) body)
-       `((lambda (,v) ,body) ,e))
-      (else cps)))
   (let ((expr (lambda-desugar cps)))
     (match expr
       ((? id? id) (list id))
@@ -247,6 +254,42 @@
   (('letval ((v clct)) ))               ;
   )
   )
+
+(define (is-referenced? cps v)
+  (memq v (free-vars cps)))
+
+(define (dead-variable-eliminate cps)
+  (match cps
+    (((? bind-special-form? sf) ((v e)) body)
+     (if (is-referenced? body v)
+         `(,sf ((,v ,(dead-variable-eliminate e)))
+               ,(dead-variable-eliminate body))
+         (dead-variable-eliminate body)))
+    (((('lambda (v) body) e))
+     ;; TODO: Here we just keep the variable which is referenced in the body,
+     ;;       however, it is possible to further optimize the body so that the
+     ;;       referencing can be eliminated.
+     ;;       A better way is to do it again after all optimizings.
+     (if (is-referenced? body v)
+         `((lambda (,v) ,(dead-variable-eliminate body))
+           ,(dead-variable-eliminate e))
+         (dead-variable-eliminate body)))
+    (('lambda (v) body)
+     (if (is-referenced? body v)
+         `(lambda (,v) ,(dead-variable-eliminate body))
+         (dead-variable-eliminate body)))
+    (else cps)))
+
+;; dead mutually recursive function elimination
+(define (dead-mrf-eliminate cps)
+  ;; Removes a bundle of mutually recursive functions if none of them occurs
+  ;; in the rest of the term
+  (define (dead-bundle cps)
+    #t)
+  ;; Removes afunction definition if it has no applied occurrences outside
+  ;; its ownbody.
+  (define (dead-fun cps) #t)
+  #t)
 
 (define (shrink cps)
   #t)
