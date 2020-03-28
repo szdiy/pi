@@ -118,6 +118,10 @@ cons, list, vector
 1. Distinct value-cps and cont-cps
 2. Args are just one list
 3. Pair and List derives from the same record cps-container
+*** Forms
+1. letval: values binding
+2. letcst: collection constructor binding
+3. letcont: continuation binding
 ** Compiling process
 *** expr->cps
 *** Shrink
@@ -204,6 +208,20 @@ An assignment into the store followed by a fetch from the same location can be a
 Then fetch can be eliminated. This should be worth for embedded system.
 *** Uncurrying
 IMO, cps-fv is easier after uncurrying.
+*** Case folding
+Compile-time evaluation of case statements when the discriminant value can be statically determined.
+*** Projection folding
+Compile-time fetching of projections of record/collection when the record/collection can be statically determined.
+** Shrink reduction
+Jim & Appel described an efficient algorithm that performs(almost) all the possible shrink reductions, even cascading ones, in one linear-time pass.
+This is aquasilinear timealgorithm: in lineartime, it typically reduces to shrink-normal form, but sometimesleaves a very small number of shrink redexes
+to be reduced ina second pass, or very rarely in a third pass.
+It includes:
+1. [[Inlining]]
+2. [[Dead variable elimination]]
+3. [[Projection folding]]
+4. [[Case folding]]
+IN A ROW!
 ** About side-effects
    1. The side-effects in syntax won't be able to affect the optimizings, because they're explicit in the syntax, so we can handle them.
    2. Only side-effects in pritimitives should be considered.

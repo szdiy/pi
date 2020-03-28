@@ -5,7 +5,7 @@
   (memq x '(init-cont)))
 
 (define (prim? p)
-  (memq p '(+ - * / add)))
+  (memq p '(+ - * / add halt)))
 
 (define (atom? x)
   (or (number? x)
@@ -21,28 +21,44 @@
 ;; TODO
 (define (assign? x) #f)
 
-(define (free-vars cps)
-  (define (union l1 l2 . args) (apply lset-union eq? l1 l2 args))
-  (define (diff l1 l2 . args) (apply lset-difference eq? l1 l2 args))
-  (match cps
-    ((? id? id) (list id))
-    #;
-    ((? assign? cps) ; all-subx-fv + assigned-var ;
-    ;; NOTE: it's reasonable to union assigned var, since there could be ;
-    ;;       self assigment, say, n=n+1. For such situation, the fv is ;
-    ;;       U{n,n} = n.         ;
-    (union (free-vars (ast-subx ast))    ;
-    (free-vars (assign-var ast))))
-    (('lambda (args ...) body)
-     ;; all-subx-fv - closure-params
-     (diff (free-vars body) args))
-    (('letval ((v e)) body)
-     (free-vars `((lambda (,v) ,body) ,e)))
-    (('letcont ((v e)) body)
-     (free-vars `((lambda (,v) ,body) ,e)))
-    ((f e ...)
-     (apply union (map free-vars cps)))
-    (else '())))
+(define (union . args) (apply lset-union eq? args))
+(define (diff . args) (apply lset-difference eq? args))
+
+(define (bind-special-form? x)
+  (memq x '(letcont let letcst letval)))
+
+(define (vars-fold rec acc cps)
+  (define (lambda-desugar cps)
+    (match cps
+      (((? bind-special-form??) ((v e)) body)
+       `((lambda (,v) ,body) ,e))
+      (else cps)))
+  (let ((expr (lambda-desugar cps)))
+    (match expr
+      ((? id? id) (list id))
+      #;
+      ((? assign? cps) ; all-subx-fv + assigned-var ; ;
+      ;; NOTE: it's reasonable to union assigned var, since there could be ; ;
+      ;;       self assigment, say, n=n+1. For such situation, the fv is ; ;
+      ;;       U{n,n} = n.         ;      ;
+      (union (proc (ast-subx ast))    ; ;
+      (proc (assign-var ast))))
+      (((or 'define 'fix) f body)
+       (acc (rec body) (list f)))
+      (('lambda (args ...) body)
+       (acc (rec body) args))
+      ((f e ...)
+       (apply union (map rec expr)))
+      (else '()))))
+
+(define (free-vars cps) (vars-fold free-vars diff cps))
+(define (names cps) (vars-fold names union cps))
+;; NOTE: free-vars <= names, so diff is enough
+(define (bound-vars cps) (apply diff (names cps) (free-vars cps)))
+
+(define (unique-binding cps)
+  #t
+  )
 
 ;; capture free substitute
 (define (cfs expr args el)
@@ -67,6 +83,28 @@
 (define (alpha-renaming expr args)
   (let ((el (map (lambda (arg) (gensym (symbol->string arg))) args)))
     (cfs expr args el)))
+
+(define (beta-reduction/preserving expr)
+  (match expr
+    ((('lambda (args ...) body) e e* ...)
+     (display "beta 0\n")
+     (beta-reduction/preserving
+      (cfs (beta-reduction/preserving body)
+           args
+           (beta-reduction/preserving `(,e ,@e*)))))
+    (((('lambda (args ...) body) e e* ...) rest ...)
+     (display "beta 1\n")
+     (beta-reduction/preserving
+      `(,(cfs (beta-reduction/preserving body)
+              args
+              (beta-reduction/preserving `(,e ,@e*)))
+        ,@(beta-reduction/preserving rest))))
+    (('lambda (args ...) body)
+     (display "beta 2\n")
+     (beta-reduction/preserving
+      `(lambda (,@args)
+         ,(beta-reduction/preserving body))))
+    (else expr)))
 
 (define (beta-reduction expr)
   (match expr
@@ -103,6 +141,12 @@
         (list beta-reduction
               eta-reduction)))
 
+(define (normalize/preserving expr)
+  (fold (lambda (f p) (f p))
+        expr
+        (list beta-reduction/preserving
+              eta-reduction)))
+
 (define (apply-cps expr cont)
   (normalize (pk "apply" `(,cont ,expr))))
 
@@ -136,7 +180,7 @@
                           (if ,k ,k1 ,k2))))))))
     (else (expr->cps expr cont))))
 
-(define* (expr->cps expr #:optional (cont 'init-cont))
+(define* (expr->cps expr #:optional (cont 'halt))
   (match expr
     (('lambda (v ...) body)
      (let ((f (gensym "f")) (j (gensym "k")))
@@ -169,7 +213,7 @@
            (ex (map (lambda (_) (gensym "e")) e)))
        (fold (lambda (ee ex p)
                (expr->cps ee `(lambda (,ex) ,p)))
-             `(letval ((,v (,type ,@ex)))
+             `(letcst ((,v (,type ,@ex)))
                 (,cont ,v))
              e ex)))
     (('begin e ...) (map expr->cps e))
@@ -197,9 +241,11 @@
      (throw 'expr->cps "wrong expr:" expr))))
 
 (define (beta-collection cexp)
-  (match cexp
-    (('letval ((v clct)) ))
-    )
+  #t
+  #;
+  (match cexp                           ;
+  (('letval ((v clct)) ))               ;
+  )
   )
 
 (define (shrink cps)
@@ -208,4 +254,5 @@
 ;;; Local Variables:
 ;;; eval: (put 'letcont 'scheme-indent-function 1)
 ;;; eval: (put 'letval 'scheme-indent-function 1)
+;;; eval: (put 'letcst 'scheme-indent-function 1)
 ;;; End:
