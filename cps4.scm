@@ -307,6 +307,8 @@
 (define (fold-projection cps)
   #t)
 
+;; 1. (if 1 2 3) -> (if 1 2 3)
+;; 2. (if 1 2 (+ 3 4)) -> (letcont ((k (halt (+ 4 3)))) (if 1 2 k))
 (define (fold-constant cps)
   (match cps
     (('letval ((v e)) body)
