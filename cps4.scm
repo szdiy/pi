@@ -304,6 +304,25 @@
   #t
   )
 
+(define (fold-projection cps)
+  #t)
+
+(define (fold-constant cps)
+  (match cps
+    (('letval ((v e)) body)
+     (fold-constant
+      (normalize/preserving
+       `((lambda (,v) ,(fold-constant body)) ,e))))
+    (('letcont ((v ('halt (? atom? a)))) body)
+     (fold-constant
+      (normalize/preserving
+       `((lambda (,v) ,(fold-constant body)) ,a))))
+    ((('lambda (v) body) e)
+     (fold-constant (normalize/preserving cps)))
+    (((? bind-special-form? sf) ((v e)) body) ;
+     `(,sf ((,v ,(fold-constant e))) ,(fold-constant body)))
+    (else cps)))
+
 (define (shrink cps)
   #t)
 
