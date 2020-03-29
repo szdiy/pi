@@ -89,6 +89,7 @@ cons, list, vector
       - CPS is suit for Von Neumann machine.
    2. ANF or Monads leads to O(n^2) in worse case because of commuting conversions.
       - While CPS only needs O(n) according to Appel & Jim 1992.
+   3. CPS guarrentees the control flow is linearized, so the optimizing algorithm complexity is quansilinear.
 
    case-2: Let's say c is the cnd of a branch, if c is permantly true or false, then the alternative branch k can be eliminated by case-1.
 ** Transformation

@@ -54,6 +54,8 @@
        (acc (rec body) (list f)))
       (('lambda (args ...) body)
        (acc (rec body) args))
+      (('if rest ...)
+       (apply union (map rec rest)))
       ((f e ...)
        (apply union (map rec expr)))
       (else '()))))
@@ -108,9 +110,11 @@
         ,@(beta-reduction/preserving rest))))
     (('lambda (args ...) body)
      (display "beta 2\n")
-     (beta-reduction/preserving
-      `(lambda (,@args)
-         ,(beta-reduction/preserving body))))
+     `(lambda (,@args) ,(beta-reduction/preserving body)))
+    (('if cnd b1 b2)
+     `(if ,(beta-reduction/preserving cnd)
+          ,(beta-reduction/preserving b1)
+          ,(beta-reduction/preserving b2)))
     (else expr)))
 
 (define (beta-reduction expr)
@@ -123,13 +127,16 @@
      (beta-reduction `(,(cfs (beta-reduction body) args (beta-reduction `(,e ,@e*)))
                        ,@(beta-reduction rest))))
     (('lambda (args ...) body)
-     (display "beta 2\n")
-     (beta-reduction `(lambda (,@args)
-                        ,(beta-reduction body))))
+     (format #t "beta 2 ~a \n" expr)
+     `(lambda (,@args) ,(beta-reduction body)))
     (('letval ((v e)) body)
      (beta-reduction `((lambda (,v) ,body) ,e)))
     (('letcont ((v e)) body)
      (beta-reduction `((lambda (,v) ,body) ,e)))
+    (('if cnd b1 b2)
+     `(if ,(beta-reduction cnd)
+          ,(beta-reduction b1)
+          ,(beta-reduction b2)))
     (else expr)))
 
 (define (eta-reduction expr)
@@ -195,12 +202,8 @@
           (,cont ,f))))
     (('define func body)
      `(fix ,func ,(expr->cps body cont)))
-    (('if cnd b1 b2)
-     (let ((tb (comp-cps expr cont))
-           (fb (expr->cps b2 cont))
-           (ck (expr->cps cnd cont)))
-       `(if ,ck ,tb ,fb)))
     (('let ((v e)) body)
+     ;; FIXME: here we only support single local binding
      (let ((j (gensym "j")))
        `(letcont ((,j (lambda (,v) ,(expr->cps body cont))))
           ,(expr->cps e j))))
@@ -255,11 +258,17 @@
   )
   )
 
+;; FIXME: We don't have to compute free-vars redundantly
 (define (is-referenced? cps v)
   (memq v (free-vars cps)))
 
 (define (dead-variable-eliminate cps)
   (match cps
+    (('letcont ((cv ('lambda (v) body))) cont-body)
+     (if (is-referenced? body v)
+         `(letcont ((,v ,(dead-variable-eliminate `(lambda (,v) ,body))))
+            ,(dead-variable-eliminate cont-body))
+         (dead-variable-eliminate body)))
     (((? bind-special-form? sf) ((v e)) body)
      (if (is-referenced? body v)
          `(,sf ((,v ,(dead-variable-eliminate e)))
@@ -290,6 +299,10 @@
   ;; its ownbody.
   (define (dead-fun cps) #t)
   #t)
+
+(define (fold-branch cps)
+  #t
+  )
 
 (define (shrink cps)
   #t)
