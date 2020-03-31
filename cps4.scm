@@ -1,8 +1,17 @@
 (import (ice-9 match)
-        (srfi srfi-1))
+        (srfi srfi-1)
+        (rnrs))
+
+(define-record-type unspecified)
+(define *unspecified* (make-unspecified))
+
+(define *top-level* (make-hash-table))
+(define (topdef! x v) (hash-set! *top-level* x v) #f)
+(define (topref x) (hash-ref *top-level* x))
+(define (topdel! x) (hash-remove! *top-level* x))
 
 (define (reserved? x)
-  (memq x '(init-cont)))
+  (memq x '(init-cont begin)))
 
 (define (prim? p)
   (memq p '(+ - * / add halt)))
@@ -25,7 +34,7 @@
 (define (diff . args) (apply lset-difference eq? args))
 
 (define (bind-special-form? x)
-  (memq x '(letcont let letcst letval)))
+  (memq x '(letcont let letcst letval letfun)))
 
 (define (lambda-desugar cps)
   (match cps
@@ -39,31 +48,50 @@
      `(sf ((,v ,e)) ))
     (else cps)))
 
-(define (vars-fold rec acc cps)
+(define (vars-fold rec acc op cps)
   (let ((expr (lambda-desugar cps)))
     (match expr
       ((? id? id) (list id))
       #;
-      ((? assign? cps) ; all-subx-fv + assigned-var ; ;
-      ;; NOTE: it's reasonable to union assigned var, since there could be ; ;
-      ;;       self assigment, say, n=n+1. For such situation, the fv is ; ;
-      ;;       U{n,n} = n.         ;      ;
-      (union (proc (ast-subx ast))    ; ;
+      ((? assign? cps) ; all-subx-fv + assigned-var
+      ;; NOTE: it's reasonable to union assigned var, since there could be
+      ;;       self assigment, say, n=n+1. For such situation, the fv is
+      ;;       U{n,n} = n.
+      (union (proc (ast-subx ast))
       (proc (assign-var ast))))
       (((or 'define 'fix) f body)
-       (acc (rec body) (list f)))
+       (op (rec body) (list f)))
       (('lambda (args ...) body)
-       (acc (rec body) args))
+       (op (rec body) args))
       (('if rest ...)
-       (apply union (map rec rest)))
+       (apply acc (map rec rest)))
+      (('begin e ...)
+       (apply acc (map rec e)))
       ((f e ...)
-       (apply union (map rec expr)))
+       (apply acc (map rec expr)))
       (else '()))))
 
-(define (free-vars cps) (vars-fold free-vars diff cps))
-(define (names cps) (vars-fold names union cps))
+(define (free-vars cps) (vars-fold free-vars union diff cps))
+(define (names cps) (vars-fold names union union cps))
 ;; NOTE: free-vars <= names, so diff is enough
 (define (bound-vars cps) (apply diff (names cps) (free-vars cps)))
+(define (all-ref-vars cps) (vars-fold all-ref-vars append append cps))
+
+;; The all-ref-vars will count all appear variables, include the local definition,
+;; so it has to be performed after these two steps:
+;; 1. dead-variable-elimination
+;; 2. alpha-renaming.
+;; rules:
+;; cnt == 1 means it's free-var
+;; cnt == 2 means it should be inlined
+;; cnt > 2, leave it as it is
+(define (make-ref-table cps)
+  (let ((vl (all-ref-vars cps))
+        (ht (make-hash-table)))
+    (for-each (lambda (v)
+                (hash-set! ht v (1+ (hash-ref ht v 0))))
+              vl)
+    ht))
 
 (define (unique-binding cps)
   #t
@@ -77,7 +105,7 @@
       => (lambda (i) (list-ref el i)))
      (else e)))
   (when (not (= (length args) (length el)))
-    (error (format #f "BUG: args: ~a, el: ~a~%" args el)))
+    (error 'cfs (format #f "BUG: args: ~a, el: ~a~%" args el)))
   (match expr
     (('lambda (_ ...) body) (cfs body args el))
     #;
@@ -86,6 +114,7 @@
     (((f e ...) rest ...)
      `((,(cfs f args el) ,@(map (lambda (ee) (cfs ee args el)) e))
        ,@(cfs rest args el)))
+    (('begin e ...) `(begin ,@(map (lambda (ee) (cfs ee args el)) e)))
     ((e ...) (map (lambda (ee) (cfs ee args el)) e))
     (else (substitute expr))))
 
@@ -115,6 +144,8 @@
      `(if ,(beta-reduction/preserving cnd)
           ,(beta-reduction/preserving b1)
           ,(beta-reduction/preserving b2)))
+    (('begin e ...)
+     `(begin ,@(map beta-reduction/preserving e)))
     (else expr)))
 
 (define (beta-reduction expr)
@@ -132,11 +163,15 @@
     (('letval ((v e)) body)
      (beta-reduction `((lambda (,v) ,body) ,e)))
     (('letcont ((v e)) body)
-     (beta-reduction `((lambda (,v) ,body) ,e)))
+     (beta-reduction `((lambda (,v) ,body) ,(beta-reduction e))))
+    (('letfun ((v e)) body)
+     (beta-reduction `((lambda (,v) ,body) ,(beta-reduction e))))
     (('if cnd b1 b2)
      `(if ,(beta-reduction cnd)
           ,(beta-reduction b1)
           ,(beta-reduction b2)))
+    (('begin e ...)
+     `(begin ,@(map beta-reduction e)))
     (else expr)))
 
 (define (eta-reduction expr)
@@ -196,11 +231,14 @@
 
 (define* (expr->cps expr #:optional (cont 'halt))
   (match expr
+    ;; FIXME: distinct value and function for the convenient of fun-inline.
     (('lambda (v ...) body)
      (let ((f (gensym "f")) (j (gensym "k")))
-       `(letval ((,f (lambda (,j ,@v) ,(expr->cps body j))))
-          (,cont ,f))))
+       `(letfun ((,f (lambda (,j ,@v) ,(expr->cps body j))))
+                (,cont ,f))))
     (('define func body)
+     ;; NOTE: The local function definition should be converted to let-binding
+     ;;       by AST builder. So all the definition here are top-level.
      `(fix ,func ,(expr->cps body cont)))
     (('let ((v e)) body)
      ;; FIXME: here we only support single local binding
@@ -226,7 +264,13 @@
              `(letcst ((,v (,type ,@ex)))
                 (,cont ,v))
              e ex)))
-    (('begin e ...) (map expr->cps e))
+    (('begin e ...)
+     (let* ((el (filter-map expr->cps e))
+            (ev (map (lambda (_) (gensym "k")) el)))
+       (fold (lambda (e v p)
+               `(letcont ((,v ,e)) ,p))
+             `(,cont (begin ,@ev))
+             el ev)))
     ((? atom? expr)
      (let ((x (gensym "x")))
        `(letval ((,x ,expr)) (,cont ,x))))
@@ -262,6 +306,7 @@
 (define (is-referenced? cps v)
   (memq v (free-vars cps)))
 
+;; This includes dead-continuation and dead-variable elimination
 (define (dead-variable-eliminate cps)
   (match cps
     (('letcont ((cv ('lambda (v) body))) cont-body)
@@ -289,15 +334,47 @@
          (dead-variable-eliminate body)))
     (else cps)))
 
+;; NOTE: Please notice that we've converted local function binding to let-binding
+;;       during AST building step, so the top-level function definition is the only
+;;       thing that I need to take care. Because the local binding will be handled
+;;       by dead-variable-eliminate.
+;;       That's what we concern in dead-fun and fun-inline
+
+;; Removes a function definition if it has no applied occurrences outside
+;; its ownbody.
+(define (dead-fun cps)
+  (let ((funcs (hash-map->list (lambda (v _) v) *top-level*))
+        (fv (free-vars cps)))
+    (map topdel! (diff funcs fv))))
+
+;; unfortunately, we don't have env in this direct CPS implementation, so it's
+;; too hard to trace back the definition of the function.
+;; NOTE: Must be applied after alpha-renaming.
+(define* (fun-inline cps #:optional (refs (make-ref-table cps)))
+  (define (inlineable-local-func? f) (= 2 (hash-ref refs f 0)))
+  (match cps
+    (('letcont ((v (letfun ((f e)) _))) body)
+     (when (inlineable-local-func? v)
+       (beta-reduction/preserving `(,(fun-inline body refs) ,(fun-inline e refs)))))
+    ((('lambda (v) body) e)
+     (cond
+      ((and (id? e) (topref e))
+       => (lambda (func-body)
+            (topdel! e)
+            (beta-reduction/preserving
+             `((lambda (,v) ,(fun-inline body refs))
+               ,(fun-inline func-body refs)))))
+      (else `((lambda (,v) ,(fun-inline body refs)) ,e))))
+    (((? bind-special-form? sf) ((v e)) body)
+     `(,sf ((,v ,(fun-inline e refs))) ,(fun-inline body refs)))
+    (else cps)))
+
 ;; dead mutually recursive function elimination
 (define (dead-mrf-eliminate cps)
   ;; Removes a bundle of mutually recursive functions if none of them occurs
   ;; in the rest of the term
   (define (dead-bundle cps)
     #t)
-  ;; Removes afunction definition if it has no applied occurrences outside
-  ;; its ownbody.
-  (define (dead-fun cps) #t)
   #t)
 
 (define (fold-branch cps)
@@ -307,8 +384,8 @@
 (define (fold-projection cps)
   #t)
 
-;; 1. (if 1 2 3) -> (if 1 2 3)
-;; 2. (if 1 2 (+ 3 4)) -> (letcont ((k (halt (+ 4 3)))) (if 1 2 k))
+;; 1. (if 1 2 3) -k-> (if 1 2 3)
+;; 2. (if 1 2 (+ 3 4)) -k-> (letcont ((k (halt (+ 4 3)))) (if 1 2 k))
 (define (fold-constant cps)
   (match cps
     (('letval ((v e)) body)
@@ -325,11 +402,19 @@
      `(,sf ((,v ,(fold-constant e))) ,(fold-constant body)))
     (else cps)))
 
+;; NOTE: We seperate dead-code-elimination to 2 steps:
+;; 1. dead-variable-elimination: eliminate dead-variable and dead-continuation
+;; 2. dead-mrf-eliminate: eliminate dead-mutually-recursive-function
+;; 3. fold-branch: eliminate dead-branch code
+(define (dead-code-eliminate cps)
+  #t)
+
 (define (shrink cps)
   #t)
 
 ;;; Local Variables:
 ;;; eval: (put 'letcont 'scheme-indent-function 1)
 ;;; eval: (put 'letval 'scheme-indent-function 1)
+;;; eval: (put 'letfun 'scheme-indent-function 1)
 ;;; eval: (put 'letcst 'scheme-indent-function 1)
 ;;; End:
