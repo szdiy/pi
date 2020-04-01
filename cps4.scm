@@ -21,6 +21,7 @@
 (define (atom? x)
   (or (number? x)
       (string? x)
+      (boolean? x)
       (null? x)))
 
 ;; Should be a dedicated record rather than symbol
@@ -232,15 +233,13 @@
            (j (gensym "j"))
            (x (gensym "x"))
            (k1 (gensym "k"))
-           (x1 (gensym "x"))
-           (k2 (gensym "k"))
-           (x2 (gensym "x")))
+           (k2 (gensym "k")))
        (comp-cps cnd
                  `(lambda (,k)
                     ;; According to Kennedy's, we add a local continuation here
                     (letcont ((,j (lambda (,x) (,cont ,x))))
-                      (letcont ((,k1 (lambda (,x1) ,(expr->cps b1 j))))
-                        (letcont ((,k2 (lambda (,x2) ,(expr->cps b2 j))))
+                      (letcont ((,k1 (lambda () ,(expr->cps b1 j))))
+                        (letcont ((,k2 (lambda () ,(expr->cps b2 j))))
                           (if ,k ,k1 ,k2))))))))
     (else (expr->cps expr cont))))
 
@@ -263,13 +262,11 @@
     (('if cnd b1 b2)
      (let ((k (gensym "k"))
            (k1 (gensym "k"))
-           (x1 (gensym "x"))
-           (k2 (gensym "k"))
-           (x2 (gensym "x")))
+           (k2 (gensym "k")))
        (comp-cps cnd
                  `(lambda (,k)
-                    (letcont ((,k1 (lambda (,x1) ,(expr->cps b1 cont))))
-                      (letcont ((,k2 (lambda (,x2) ,(expr->cps b2 cont))))
+                    (letcont ((,k1 (lambda () ,(expr->cps b1 cont))))
+                      (letcont ((,k2 (lambda () ,(expr->cps b2 cont))))
                         (if ,k ,k1 ,k2)))))))
     (('collection type e ...)
      (let ((v (gensym "x"))
@@ -393,10 +390,8 @@
     #t)
   #t)
 
-(define (fold-branch cps)
-  #t
-  )
-
+;; NOTE: not easy, we have to do effect-analysis first, only immutable projection
+;;       could be folded.
 (define (fold-projection cps)
   #t)
 
@@ -418,7 +413,35 @@
      `(,sf ((,v ,(fold-constant e))) ,(fold-constant body)))
     (else cps)))
 
+;; NOTE: fold-constant should be applied before.
+;; NOTE: after eliminate the dead branch, it's necessary to apply
+;;       dead-variable-eliminate to reduce the unused branch continuation binding.
+(define (fold-branch cps)
+  (define (detect e)
+    (match e
+      ((? boolean? b) b)
+      (else 'no)))
+  (match cps
+    (('if cnd b1 b2)
+     (let ((result (detect cnd)))
+       (match result
+         ('no cps)
+         (#t b1)
+         (else b2))))
+    ((('lambda (v) body) e ...)
+     `((lambda (,v) ,(fold-branch body)) ,@(map fold-branch e)))
+    (('lambda (v) body)
+     `(lambda (,v) ,(fold-branch body)))
+    (((? bind-special-form? sf) ((v e)) body)
+     `(,sf ((,v ,(fold-branch e))) ,(fold-branch body)))
+    (('begin rest ...)
+     `(begin ,@(map fold-branch rest)))
+    ((f args ...)
+     `(,f ,@(map fold-branch args)))
+    (else cps)))
+
 ;; NOTE: fold-constant must be applied before, otherwise it doesn't work.
+;; FIXME: Only pure-functional primitives can be reduced.
 (define (delta-reduction expr)
   (define (prim-fold p args)
     (if (every integer? args)
