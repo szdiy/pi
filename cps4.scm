@@ -13,6 +13,8 @@
 (define (reserved? x)
   (memq x '(init-cont begin)))
 
+(define halt identity)
+
 (define (prim? p)
   (memq p '(+ - * / add halt)))
 
@@ -410,11 +412,32 @@
      (fold-constant
       (normalize/preserving
        `((lambda (,v) ,(fold-constant body)) ,a))))
-    ((('lambda (v) body) e)
+    ((('lambda (v) body) e ...)
      (fold-constant (normalize/preserving cps)))
     (((? bind-special-form? sf) ((v e)) body) ;
      `(,sf ((,v ,(fold-constant e))) ,(fold-constant body)))
     (else cps)))
+
+;; NOTE: fold-constant must be applied before, otherwise it doesn't work.
+(define (delta-reduction expr)
+  (define (prim-fold p args)
+    (if (every integer? args)
+        (primitive-eval `(,p ,@args))
+        `(,p ,@args)))
+  (match expr
+    ((('lambda (v) body) e ...)
+     `((lambda (,v) ,(delta-reduction body)) ,@(map delta-reduction e)))
+    (('lambda (v) body)
+     `(lambda (,v) ,(delta-reduction body)))
+    (((? bind-special-form? sf) ((v e)) body)
+     `(,sf ((,v ,(delta-reduction e))) ,(delta-reduction body)))
+    (('begin rest ...)
+     `(begin ,@(map delta-reduction rest)))
+    (((? id? f) args ...)
+     `(,f ,@(map delta-reduction args)))
+    (((? prim? p) args ...)
+     (prim-fold p (map delta-reduction args)))
+    (else expr)))
 
 ;; NOTE: We seperate dead-code-elimination to 2 steps:
 ;; 1. dead-variable-elimination: eliminate dead-variable and dead-continuation
