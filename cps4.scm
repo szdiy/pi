@@ -35,6 +35,7 @@
 
 (define (union . args) (apply lset-union eq? args))
 (define (diff . args) (apply lset-difference eq? args))
+(define (insec . args) (apply lset-intersection eq? args))
 
 (define (bind-special-form? x)
   (memq x '(letcont let letcst letval letfun)))
@@ -130,9 +131,32 @@
      (format #t "cfs 4 ~a~%" expr)
      (substitute expr))))
 
-(define (alpha-renaming expr args)
-  (let ((el (map (lambda (arg) (gensym (symbol->string arg))) args)))
-    (cfs expr args el)))
+(define (alpha-renaming expr old new)
+  (define (rename e)
+    (cond
+     ((list-index (lambda (x) (eq? x e)) old)
+      => (lambda (i) (list-ref new i)))
+     (else e)))
+  (match expr
+    (('lambda (v ...) body)
+     (if (null? (insec v old))
+         `(lambda (,@v) ,(alpha-renaming body old new))
+         ;; new binding, don't rename more deeply anymore
+         expr))
+    (((f e ...) rest ...)
+     (format #t "alpha 1 ~a~%" expr)
+     `((,(alpha-renaming f old new)
+        ,@(map (lambda (ee) (alpha-renaming ee old new)) e))
+       ,@(alpha-renaming rest old new)))
+    (('begin e ...)
+     (format #t "alpha 2 ~a~%" expr)
+     `(begin ,@(map (lambda (ee) (alpha-renaming ee old new)) e)))
+    ((e ...)
+     (format #t "alpha 3 ~a~%" expr)
+     (map (lambda (ee) (alpha-renaming ee old new)) e))
+    (else
+     (format #t "alpha 4 ~a~%" expr)
+     (rename expr))))
 
 (define (beta-reduction/preserving expr)
   (match expr
@@ -220,14 +244,17 @@
   (match expr
     (('lambda (v ...) body)
      (let ((f (gensym "f"))
-           (k (gensym "k")))
-       `(letval ((,f (lambda (,k ,@v) ,(expr->cps body k))))
+           (k (gensym "k"))
+           (nv (map (lambda (v) (gensym (symbol->string v))) v)))
+       `(letval ((,f ,(alpha-renaming `(lambda (,k ,@nv) ,(expr->cps body k) v)
+                                      v nv)))
           (,cont ,f))))
     (('let ((v e)) body)
      (let ((j (gensym "j"))
-           (x (gensym "x")))
-       `(letcont ((,j (lambda (,x) ,(comp-cps body cont))))
-          ,(expr->cps e j))))
+           (nv (gensym (symbol->string v))))
+       `(letcont ((,j (lambda (,nv) ,(alpha-renaming (comp-cps body cont)
+                                                     (list v) (list nv)))))
+          ,(alpha-renaming (expr->cps e j) (list v) (list nv)))))
     (('if cnd b1 b2)
      (let ((k (gensym "k"))
            (j (gensym "j"))
@@ -247,8 +274,11 @@
   (match expr
     ;; FIXME: distinct value and function for the convenient of fun-inline.
     (('lambda (v ...) body)
-     (let ((f (gensym "f")) (j (gensym "k")))
-       `(letfun ((,f (lambda (,j ,@v) ,(expr->cps body j))))
+     (let ((f (gensym "f"))
+           (j (gensym "k"))
+           (nv (map (lambda (v) (gensym (symbol->string v))) v)))
+       `(letfun ((,f ,(alpha-renaming `(lambda (,j ,@nv) ,(expr->cps body j))
+                                      v nv)))
                 (,cont ,f))))
     (('define func body)
      ;; NOTE: The local function definition should be converted to let-binding
@@ -256,9 +286,12 @@
      `(fix ,func ,(expr->cps body cont)))
     (('let ((v e)) body)
      ;; FIXME: here we only support single local binding
-     (let ((j (gensym "j")))
-       `(letcont ((,j (lambda (,v) ,(expr->cps body cont))))
-          ,(expr->cps e j))))
+     (let ((j (gensym "j"))
+           (x (gensym "x"))
+           (nv (gensym (symbol->string v))))
+       `(letcont ((,j (lambda (,nv) ,(alpha-renaming (expr->cps body cont)
+                                                     (list v) (list nv)))))
+          ,(alpha-renaming (expr->cps e j) (list v) (list nv)))))
     (('if cnd b1 b2)
      (let ((k (gensym "k"))
            (k1 (gensym "k"))
@@ -357,8 +390,11 @@
 (define (dead-fun cps)
   (let ((funcs (hash-map->list (lambda (v _) v) *top-level*))
         (fv (free-vars cps)))
-    (map topdel! (diff funcs fv))))
+    (map topdel! (diff funcs fv))
+    cps))
 
+;; NOTE: It is also called beta-contract, which means inlining the function that
+;;       appears only once.
 ;; unfortunately, we don't have env in this direct CPS implementation, so it's
 ;; too hard to trace back the definition of the function.
 ;; NOTE: Must be applied after alpha-renaming.
@@ -469,8 +505,18 @@
 (define (dead-code-eliminate cps)
   #t)
 
+(define *optimizings*
+  (list fun-inline
+        dead-fun
+        fold-constant
+        delta-reduction
+        fold-branch
+        dead-variable-eliminate))
+
 (define (shrink cps)
-  #t)
+  (fold (lambda (o p) (format #t "~a: ~a~%" o p) (o p))
+        cps
+        *optimizings*))
 
 ;;; Local Variables:
 ;;; eval: (put 'letcont 'scheme-indent-function 1)
