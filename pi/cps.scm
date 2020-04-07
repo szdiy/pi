@@ -1,5 +1,5 @@
 ;;  -*-  indent-tabs-mode:nil; coding: utf-8 -*-
-;;  Copyright (C) 2019
+;;  Copyright (C) 2019,2020
 ;;      "Mu Lei" known as "NalaGinrut" <mulei@gnu.org>
 ;;  Pi is free software: you can redistribute it and/or modify
 ;;  it under the terms of the GNU General Public License published
@@ -15,24 +15,16 @@
 ;;  along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (pi cps)
+  #:use-module (pi utils)
   #:use-module (pi ast)
+  #:use-module (pi types)
   #:use-module (srfi srfi-1)
-  #:use-module ((rnrs) #:select define-record-type)
   #:export (ast->cps))
 
 (define-record-type cps ; super type for checking cps types
   (fields
    kont   ; The current continuation
    name)) ; The id of the continuation
-
-(define-syntax cps-define
-  (lambda (x)
-    (syntax-case x ()
-      ((_ name (clauses ...)) (identifier? #'name)
-       #`(define-record-type
-           #,(datum->syntax #'name (symbol-append (syntax->datum #'name) '/k))
-           (parent cps)
-           (fields clauses ...))))))
 
 ;; kontext means kontinuation-context
 
@@ -48,5 +40,54 @@
 ;;    removed in a seperated phase.
 ;;
 
-(cps-define let (vars vals))
-(cps-define branch (cnd true false))
+(define-typed-record cps
+  (fields
+   (kont cps?)
+   (name symbol?)
+   ;; The result of the current expr will be bound to karg, and be passed to kont
+   (karg symbol?)))
+
+(define-typed-record lambda/k (parent cps)
+  (fields
+   (args list?)
+   (body cps?)))
+
+(define-typed-record letval/k (parent cps)
+  (fields
+   (value cps?)))
+
+(define-typed-record letfun/k (parent cps)
+  (fields
+   (value cps?)))
+
+(define-typed-record letcont/k (parent cps)
+  (fields
+   (value cps?)))
+
+(define-typed-record branch/k (parent cps)
+  (fields
+   (cnd cps?)
+   (tbranch letcont/k?)
+   (fbranch letcont/k?)))
+
+(define-typed-record collection/k (parent cps)
+  (fields type size value))
+
+(define-typed-record seq/k (parent cps)
+  (fields
+   (exprs list?)))
+
+(define-typed-record define/k (parent cps)
+  (fields
+   (name symbol?)
+   (value cps?)))
+
+(define-typed-record app/k (parent cps)
+  (fields
+   (func letfun/k?)
+   (args list?)))
+
+(define* (cps->src cps #:optional (hide-begin? #t))
+  (match cps
+    ;; TODO
+    ))

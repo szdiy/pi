@@ -1,5 +1,5 @@
 ;;  -*-  indent-tabs-mode:nil; coding: utf-8 -*-
-;;  Copyright (C) 2015,2019
+;;  Copyright (C) 2015,2019,2020
 ;;      "Mu Lei" known as "NalaGinrut" <mulei@gnu.org>
 ;;  Pi is free software: you can redistribute it and/or modify
 ;;  it under the terms of the GNU General Public License published
@@ -28,9 +28,20 @@
             is-boolean-node?
             is-char-node?
             is-immediate-node?
+            is-unspecified-node?
             integer-check
             pred-constant
-            is-immediate?))
+            is-immediate?
+
+            make-primitive
+            primitive?
+            primitive-name
+            primitive-proc
+
+            make-id
+            id?
+            id-name
+            id-orig))
 
 (define-record-type constant (fields val type))
 
@@ -45,13 +56,27 @@
    ((pair? x) 'pair)
    ((list? x) 'list)
    ((vector? x) 'vector)
-   ((unspecified? x) 'special)
+   ((unspecified? x) 'unspecified)
    (else (throw 'pi-error "Invalid literal type!" x))))
 
-;; FIXME: char should be uniq in global
+(define *pi/unspecified* (gen-constant 'unspecified))
+(define *pi/chars* (list->vector
+                    (map (lambda (i) (make-constant 'char (integer->char i)))
+                         (iota 128))))
+
+(define *global-constant-type*
+  `((unspecified . ,(lambda (_) *pi/unspecified*))
+    (char . ,(lambda (c) (vector-ref *pi/chars* (char->integer c))))))
+
+(define (global-constant-type? t)
+  (assoc-ref *global-constant-type* t))
+
 (define (gen-constant x)
   (let ((type (detect-literal-type x)))
-    (make-constant x type)))
+    (cond
+     ((global-constant-type? type)
+      => (lambda (generator) (generator x)))
+     (else (make-constant x type)))))
 
 (define (pred-constant x type)
   (and (constant? x) (eq? (constant-type x) type)))
@@ -59,6 +84,7 @@
 (define (is-boolean-node? x) (pred-constant x 'boolean))
 (define (is-char-node? x) (pred-constant x 'char))
 (define (is-integer-node? x) (pred-constant x 'integer))
+(define (is-unspecified-node? x) (pred-constant x 'unspecified))
 
 ;; NOTE: not all constant are immediate, e.g, strings are constant
 ;;       but not immediate.
@@ -87,3 +113,15 @@
 
 (define (is-immediate? x)
   (any (lambda (c) (c x)) *immediates-pred*))
+
+(define-typed-record primitive
+  (fields
+   (name symbol?)
+   ;; proc is not the final primitive, but it can be used for delta-reduction
+   (proc procedure?)))
+
+(define-typed-record id
+  (fields
+   (name symbol?)
+   ;; For example, the orig of x123 is x
+   (orig symbol?)))

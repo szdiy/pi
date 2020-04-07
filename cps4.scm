@@ -13,7 +13,7 @@
 (define (reserved? x)
   (memq x '(init-cont begin)))
 
-(define halt identity)
+(define (halt x) `(halt ,x))
 
 (define (prim? p)
   (memq p '(+ - * / add halt)))
@@ -112,23 +112,23 @@
     (error 'cfs (format #f "BUG: expr: ~a, args: ~a, el: ~a~%" expr args el)))
   (match expr
     (('lambda (v ...) body)
-     (format #t "cfs 0 ~a~%" expr)
+     ;;(format #t "cfs 0 ~a~%" expr)
      `(lambda (,@v) ,(cfs body args el)))
     #;
     (((? symbol? s) rest ...)           ;
     `(,(substitute s) ,@(cfs rest args el)))
     (((f e ...) rest ...)
-     (format #t "cfs 1 ~a~%" expr)
+     ;;(format #t "cfs 1 ~a~%" expr)
      `((,(cfs f args el) ,@(map (lambda (ee) (cfs ee args el)) e))
        ,@(cfs rest args el)))
     (('begin e ...)
-     (format #t "cfs 2 ~a~%" expr)
+     ;;(format #t "cfs 2 ~a~%" expr)
      `(begin ,@(map (lambda (ee) (cfs ee args el)) e)))
     ((e ...)
-     (format #t "cfs 3 ~a~%" expr)
+     ;;(format #t "cfs 3 ~a~%" expr)
      (map (lambda (ee) (cfs ee args el)) e))
     (else
-     (format #t "cfs 4 ~a~%" expr)
+     ;;(format #t "cfs 4 ~a~%" expr)
      (substitute expr))))
 
 (define (alpha-renaming expr old new)
@@ -144,37 +144,37 @@
          ;; new binding, don't rename more deeply anymore
          expr))
     (((f e ...) rest ...)
-     (format #t "alpha 1 ~a~%" expr)
+     ;;(format #t "alpha 1 ~a~%" expr)
      `((,(alpha-renaming f old new)
         ,@(map (lambda (ee) (alpha-renaming ee old new)) e))
        ,@(alpha-renaming rest old new)))
     (('begin e ...)
-     (format #t "alpha 2 ~a~%" expr)
+     ;;(format #t "alpha 2 ~a~%" expr)
      `(begin ,@(map (lambda (ee) (alpha-renaming ee old new)) e)))
     ((e ...)
-     (format #t "alpha 3 ~a~%" expr)
+     ;;(format #t "alpha 3 ~a~%" expr)
      (map (lambda (ee) (alpha-renaming ee old new)) e))
     (else
-     (format #t "alpha 4 ~a~%" expr)
+     ;;(format #t "alpha 4 ~a~%" expr)
      (rename expr))))
 
 (define (beta-reduction/preserving expr)
   (match expr
     ((('lambda (args ...) body) e e* ...)
-     (display "beta 0\n")
+     ;;(display "beta 0\n")
      (beta-reduction/preserving
       (cfs (beta-reduction/preserving body)
            args
            (beta-reduction/preserving `(,e ,@e*)))))
     (((('lambda (args ...) body) e e* ...) rest ...)
-     (display "beta 1\n")
+     ;;(display "beta 1\n")
      (beta-reduction/preserving
       `(,(cfs (beta-reduction/preserving body)
               args
               (beta-reduction/preserving `(,e ,@e*)))
         ,@(beta-reduction/preserving rest))))
     (('lambda (args ...) body)
-     (display "beta 2\n")
+     ;;(display "beta 2\n")
      `(lambda (,@args) ,(beta-reduction/preserving body)))
     (('if cnd b1 b2)
      `(if ,(beta-reduction/preserving cnd)
@@ -189,14 +189,14 @@
 (define (beta-reduction expr)
   (match expr
     ((('lambda (args ...) body) e ...)
-     (format #t "beta 0 ~a~%" expr)
+     ;;(format #t "beta 0 ~a~%" expr)
      (beta-reduction (cfs (beta-reduction body) args (map beta-reduction e))))
     (((('lambda (args ...) body) e ...) rest ...)
-     (format #t "beta 1 ~a~%" expr)
+     ;;(format #t "beta 1 ~a~%" expr)
      (beta-reduction `(,(cfs (beta-reduction body) args (map beta-reduction e))
                        ,@(beta-reduction rest))))
     (('lambda (args ...) body)
-     (format #t "beta 2 ~a \n" expr)
+     ;;(format #t "beta 2 ~a \n" expr)
      `(lambda (,@args) ,(beta-reduction body)))
     (('letval ((v e)) body)
      (beta-reduction `((lambda (,v) ,body) ,e)))
@@ -217,10 +217,10 @@
 (define (eta-reduction expr)
   (match expr
     (('lambda (arg) (f arg))
-     (display "eta-0\n")
+     ;;(display "eta-0\n")
      (eta-reduction f))
     ((('lambda (arg) (f arg)) rest ...)
-     (display "eta-1\n")
+     ;;(display "eta-1\n")
      (eta-reduction `(,(eta-reduction f) ,@(eta-reduction rest))))
     (else expr)))
 
@@ -279,7 +279,7 @@
            (nv (map (lambda (v) (gensym (symbol->string v))) v)))
        `(letfun ((,f ,(alpha-renaming `(lambda (,j ,@nv) ,(expr->cps body j))
                                       v nv)))
-                (,cont ,f))))
+          (,cont ,f))))
     (('define func body)
      ;; NOTE: The local function definition should be converted to let-binding
      ;;       by AST builder. So all the definition here are top-level.
@@ -514,7 +514,8 @@
         dead-variable-eliminate))
 
 (define (shrink cps)
-  (fold (lambda (o p) (format #t "~a: ~a~%" o p) (o p))
+  (fold (lambda (o p) #;(format #t "~a: ~a~%" o p) (o p)
+                )
         cps
         *optimizings*))
 
