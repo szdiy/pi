@@ -19,6 +19,7 @@
   #:use-module (pi ast)
   #:use-module (pi types)
   #:use-module (srfi srfi-1)
+  #:use-module ((rnrs) #:select (define-record-type))
   #:export (ast->cps))
 
 (define-record-type cps ; super type for checking cps types
@@ -43,26 +44,23 @@
 (define-typed-record cps
   (fields
    (kont cps?)
-   (name symbol?)
+   (name id?)
    ;; The result of the current expr will be bound to karg, and be passed to kont
-   (karg symbol?)))
+   (karg id?)))
+
+(define-typed-record bind-special-form/k (parent cps)
+  (fields
+   (var id?)
+   (value cps?)))
 
 (define-typed-record lambda/k (parent cps)
   (fields
    (args list?)
    (body cps?)))
 
-(define-typed-record letval/k (parent cps)
-  (fields
-   (value cps?)))
-
-(define-typed-record letfun/k (parent cps)
-  (fields
-   (value cps?)))
-
-(define-typed-record letcont/k (parent cps)
-  (fields
-   (value cps?)))
+(define-typed-record letval/k (parent bind-special-form/k))
+(define-typed-record letfun/k (parent bind-special-form/k))
+(define-typed-record letcont/k (parent bind-special-form/k))
 
 (define-typed-record branch/k (parent cps)
   (fields
@@ -71,7 +69,10 @@
    (fbranch letcont/k?)))
 
 (define-typed-record collection/k (parent cps)
-  (fields type size value))
+  (fields
+   (type symbol?)
+   (size integer?)
+   (value any?)))
 
 (define-typed-record seq/k (parent cps)
   (fields
@@ -79,13 +80,116 @@
 
 (define-typed-record define/k (parent cps)
   (fields
-   (name symbol?)
+   (name id?)
    (value cps?)))
 
 (define-typed-record app/k (parent cps)
   (fields
    (func letfun/k?)
    (args list?)))
+
+(define (lambda-desugar cps)
+  (match cps
+    (($ bind-special-form/k ($cps kont name) var value)
+     (make-lambda/k kont name (list var) value))
+    (else cps)))
+
+;; FIXME: Should we count karg?
+(define (vars-fold rec acc op cps)
+  (let ((expr (lambda-desugar cps)))
+    (match expr
+      ((? id? id) (list id))
+      #;
+      ((? assign? cps) ; all-subx-fv + assigned-var
+      ;; NOTE: it's reasonable to union assigned var, since there could be
+      ;;       self assigment, say, n=n+1. For such situation, the fv is
+      ;;       U{n,n} = n.
+      (union (proc (ast-subx ast))
+      (proc (assign-var ast))))
+      (($ define/k _ f body)
+       (op (rec body) (list f)))
+      (($ lambda/k _ args body)
+       (op (rec body) args))
+      (($ branch/k _ cnd b1 b2)
+       (apply acc (map rec (list cnd b1 b2))))
+      (($ seq/k _ exprs)
+       (apply acc (map rec exprs)))
+      (($ app/k _ f args)
+       (apply acc (map rec args)))
+      (else '()))))
+
+(define (union . args) (apply lset-union id-eq? args))
+(define (diff . args) (apply lset-difference id-eq? args))
+(define (insec . args) (apply lset-intersection id-eq? args))
+
+(define (free-vars cps) (vars-fold free-vars union diff cps))
+(define (names cps) (vars-fold names union union cps))
+;; NOTE: free-vars <= names, so diff is enough
+(define (bound-vars cps) (apply diff (names cps) (free-vars cps)))
+(define (all-ref-vars cps) (vars-fold all-ref-vars append append cps))
+
+;; The all-ref-vars will count all appear variables, include the local definition,
+;; so it has to be performed after these two steps:
+;; 1. dead-variable-elimination
+;; 2. alpha-renaming.
+;; rules:
+;; cnt == 1 means it's free-var
+;; cnt == 2 means it should be inlined
+;; cnt > 2, leave it as it is
+(define (make-ref-table cps)
+  (let ((vl (all-ref-vars cps))
+        (ht (make-hash-table)))
+    (for-each (lambda (v)
+                (hash-set! ht v (1+ (hash-ref ht v 0))))
+              vl)
+    ht))
+
+;; capture free substitute
+(define (cfs expr args el)
+  (define (substitute e)
+    (cond
+     ((list-index (lambda (x) (eq? x e)) args)
+      => (lambda (i) (list-ref el i)))
+     (else e)))
+  (when (not (= (length args) (length el)))
+    (throw 'pi-error cfs
+           (format #f "BUG: expr: ~a, args: ~a, el: ~a~%" expr args el)))
+  (match expr
+    (($ lambda/k ($ cps _ kont name karg) fargs body)
+     ;;(format #t "cfs 0 ~a~%" expr)
+     (make-lambda/k kont name karg fargs (cfs body args el)))
+    (($ app/k ($ cps _ kont name karg) f e) ((f e ...) rest ...)
+     ;;(format #t "cfs 1 ~a~%" expr)
+     (make-app/k kont name karg (cfs f args el) (cfs e args el)))
+    (($ seq/k ($ cps _ kont name karg) exprs)
+     ;;(format #t "cfs 2 ~a~%" expr)
+     (make-seq/k kont name karg (map (lambda (ee) (cfs ee args el)) exprs)))
+    (else
+     ;;(format #t "cfs 4 ~a~%" expr)
+     (substitute expr))))
+
+(define (alpha-renaming expr old new)
+  (define (rename e)
+    (cond
+     ((list-index (lambda (x) (eq? x e)) old)
+      => (lambda (i) (list-ref new i)))
+     (else e)))
+  (match expr
+    (($ lambda/k ($ cps _ kont name karg) fargs body)
+     (if (null? (insec fargs old))
+         (make-lambda/k kont name karg fargs (alpha-renaming body old new))
+         ;; new binding, don't rename more deeply anymore
+         expr))
+    (($ app/k ($ cps _ kont name karg) f e)
+     ;;(format #t "alpha 1 ~a~%" expr)
+     (make-app/k kont name karg (alpha-renaming f old new)
+                 (map (lambda (ee) (alpha-renaming ee old new)) e)))
+    (($ seq/k ($cps _ kont name karg) exprs)
+     ;;(format #t "alpha 2 ~a~%" expr)
+     (make-seq/k kont name karg (map (lambda (ee) (alpha-renaming ee old new)) e)))
+    (else
+     ;;(format #t "alpha 4 ~a~%" expr)
+     (rename expr))))
 
 (define* (cps->src cps #:optional (hide-begin? #t))
   (match cps

@@ -46,12 +46,6 @@
      `((lambda (,v) ,body) ,e))
     (else cps)))
 
-(define (lambda-sugarize cps body)
-  (match cps
-    (((? bind-special-form? sf) ((v e)) body)
-     `(sf ((,v ,e)) ))
-    (else cps)))
-
 (define (vars-fold rec acc op cps)
   (let ((expr (lambda-desugar cps)))
     (match expr

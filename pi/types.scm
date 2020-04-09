@@ -41,7 +41,9 @@
             make-id
             id?
             id-name
-            id-orig))
+            id-orig
+            new-id
+            id-eq?))
 
 (define-record-type constant (fields val type))
 
@@ -125,3 +127,16 @@
    (name symbol?)
    ;; For example, the orig of x123 is x
    (orig symbol?)))
+
+(define* (new-id #:optional (orig "x"))
+  (cond
+   ((not orig) (gensym "x"))
+   ((string? orig) (gensym orig))
+   ((symbol? orig) (newsym orig))
+   (else (throw 'pi-error new-id "Inavlid orig `~a'" orig))))
+
+(define (id-eq? x y)
+  (when (or (not (id? x)) (not (id? y)))
+    (throw 'pi-error id-eq?
+           "Invalid id type: `~a', `~a'" x y))
+  (eq? (id-name x) (id-name y)))

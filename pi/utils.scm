@@ -1,5 +1,5 @@
 ;;  -*-  indent-tabs-mode:nil; coding: utf-8 -*-
-;;  Copyright (C) 2015,2019
+;;  Copyright (C) 2015,2019,2020
 ;;      "Mu Lei" known as "NalaGinrut" <mulei@gnu.org>
 ;;  Pi is free software: you can redistribute it and/or modify
 ;;  it under the terms of the GNU General Public License published
@@ -18,6 +18,7 @@
   #:use-module (srfi srfi-1)
   #:use-module (ice-9 match)
   #:use-module (ice-9 q)
+  #:use-module ((rnrs) #:select (define-record-type))
   #:export (newsym
             extract-ids
             new-stack
