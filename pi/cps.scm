@@ -191,6 +191,26 @@
      ;;(format #t "alpha 4 ~a~%" expr)
      (rename expr))))
 
+(define (beta-reduction/preserving expr)
+  (match expr
+    (($ app/k _ ($ lambda/k _ params body) args)
+     ;;(display "beta 0\n")
+     (beta-reduction/preserving
+      (cfs (beta-reduction/preserving body)
+           params
+           (beta-reduction/preserving args))))
+    (($ lambda/k ($ cps _ kont name karg) args body)
+     ;;(display "beta 2\n")
+     (make-lambda/k kont name karg args (beta-reduction/preserving body)))
+    (($ branch/k ($ cps _ kont name karg) cnd b1 b2)
+     (make-branch/k kont name karg
+                    (beta-reduction/preserving cnd)
+                    (beta-reduction/preserving b1)
+                    (beta-reduction/preserving b2)))
+    (($ seq/k ($ cps _ kont name karg) e)
+     (make-seq/k kont name karg (map beta-reduction/preserving e)))
+    (else expr)))
+
 (define* (cps->src cps #:optional (hide-begin? #t))
   (match cps
     ;; TODO
