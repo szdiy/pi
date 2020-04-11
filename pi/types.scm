@@ -16,6 +16,7 @@
 
 (define-module (pi types)
   #:use-module (pi env)
+  #:use-module (pi utils)
   #:use-module ((rnrs) #:select (define-record-type))
   #:use-module (srfi srfi-1)
   #:export (constant
@@ -61,11 +62,6 @@
    ((unspecified? x) 'unspecified)
    (else (throw 'pi-error "Invalid literal type!" x))))
 
-(define *pi/unspecified* (gen-constant 'unspecified))
-(define *pi/chars* (list->vector
-                    (map (lambda (i) (make-constant 'char (integer->char i)))
-                         (iota 128))))
-
 (define *global-constant-type*
   `((unspecified . ,(lambda (_) *pi/unspecified*))
     (char . ,(lambda (c) (vector-ref *pi/chars* (char->integer c))))))
@@ -82,6 +78,11 @@
 
 (define (pred-constant x type)
   (and (constant? x) (eq? (constant-type x) type)))
+
+(define *pi/unspecified* (gen-constant 'unspecified))
+(define *pi/chars* (list->vector
+                    (map (lambda (i) (make-constant 'char (integer->char i)))
+                         (iota 128))))
 
 (define (is-boolean-node? x) (pred-constant x 'boolean))
 (define (is-char-node? x) (pred-constant x 'char))
@@ -125,15 +126,16 @@
 (define-typed-record id
   (fields
    (name symbol?)
-   ;; For example, the orig of x123 is x
+   ;; For example, the orig of x-123 is x
    (orig symbol?)))
 
-(define* (new-id #:optional (orig "x"))
-  (cond
-   ((not orig) (gensym "x"))
-   ((string? orig) (gensym orig))
-   ((symbol? orig) (newsym orig))
-   (else (throw 'pi-error new-id "Inavlid orig `~a'" orig))))
+(define* (new-id #:optional (orig "x-"))
+  (let* ((orig-fix (cond
+                    ((string? orig) (string->symbol orig))
+                    ((symbol? orig) orig)
+                    (else (throw 'pi-error new-id "Inavlid orig `~a'" orig))))
+         (name (newsym orig-fix)))
+    (make-id name orig-fix)))
 
 (define (id-eq? x y)
   (when (or (not (id? x)) (not (id? y)))

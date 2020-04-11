@@ -20,7 +20,8 @@
   #:use-module (pi types)
   #:use-module (srfi srfi-1)
   #:use-module ((rnrs) #:select (define-record-type))
-  #:export (ast->cps))
+  #:export (ast->cps
+            cps-list?))
 
 (define-record-type cps ; super type for checking cps types
   (fields
@@ -41,17 +42,24 @@
 ;;    removed in a seperated phase.
 ;;
 
+(define (cps-list? lst)
+  (make-object-list-pred lst cps?))
+
 (define-typed-record cps
   (fields
-   (kont cps?)
+   (kont (lambda (x) (or (eq? x 'halt) (cps? x))))
    (name id?)
    ;; The result of the current expr will be bound to karg, and be passed to kont
    (karg id?)))
 
+;; halt can associate with primitive `halt', its activity is TOS.
+(define %halt (make-cps 'halt (new-id "kont-") (new-id "k-")))
+
 (define-typed-record bind-special-form/k (parent cps)
   (fields
    (var id?)
-   (value cps?)))
+   (value cps?)
+   (body cps?)))
 
 (define-typed-record lambda/k (parent cps)
   (fields
@@ -87,6 +95,9 @@
   (fields
    (func letfun/k?)
    (args list?)))
+
+(define (cont-apply f e)
+  (make-app/k 'halt (new-id "kont-") (new-id "k-") f e))
 
 (define (lambda-desugar cps)
   (match cps
@@ -209,6 +220,45 @@
                     (beta-reduction/preserving b2)))
     (($ seq/k ($ cps _ kont name karg) e)
      (make-seq/k kont name karg (map beta-reduction/preserving e)))
+    (($ letval/k ($ cps _ kont name karg) var value body)
+     (beta-reduction `((lambda (,v) ,body) ,e)))
+    (('letcont ((v e)) body)
+     (beta-reduction `((lambda (,v) ,body) ,(beta-reduction e))))
+    (('letfun ((v e)) body)
+     (beta-reduction `((lambda (,v) ,body) ,(beta-reduction e))))
+    (else expr)))
+
+(define (beta-reduction expr)
+  (match expr
+    (($ app/k _ ($ lambda/k _ params body) args)
+     ;;(display "beta 0\n")
+     (beta-reduction/preserving
+      (cfs (beta-reduction/preserving body)
+           params
+           (beta-reduction/preserving args))))
+    (($ lambda/k ($ cps _ kont name karg) args body)
+     ;;(display "beta 2\n")
+     (make-lambda/k kont name karg args (beta-reduction/preserving body)))
+    (($ branch/k ($ cps _ kont name karg) cnd b1 b2)
+     (make-branch/k kont name karg
+                    (beta-reduction/preserving cnd)
+                    (beta-reduction/preserving b1)
+                    (beta-reduction/preserving b2)))
+    (($ seq/k ($ cps _ kont name karg) exprs)
+     (make-seq/k kont name karg (map beta-reduction/preserving exprs)))
+    (($ bind-special-form/k ($ cps _ kont name karg) var value body)
+     (beta-reduction
+      (cont-apply (make-lambda kont name karg (list var) body) value)))
+    (else expr)))
+
+(define (eta-reduction expr)
+  (match expr
+    (($ lambda/k _ arg ($ app/k _ f (? (lambda (a) (id-eq? a arg)))))
+     ;;(display "eta-0\n")
+     (eta-reduction f))
+    (($ seq/k ($ cps _ kont name karg) exprs)
+     ;;(display "eta-1\n")
+     (eta-reduction (make-seq/k kont name karg (map eta-reduction exprs))))
     (else expr)))
 
 (define* (cps->src cps #:optional (hide-begin? #t))

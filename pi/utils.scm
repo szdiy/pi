@@ -44,7 +44,6 @@
             define-typed-record
             make-object-list-pred
             symbol-list?
-            cps-list?
             any?
             immediate?))
 
@@ -127,8 +126,6 @@
 
 (define (symbol-list? lst)
   (make-object-list-pred lst symbol?))
-(define (cps-list? lst)
-  (make-object-list-pred lst cps?))
 
 (define (any? o) #t)
 
