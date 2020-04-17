@@ -1,5 +1,5 @@
 ;;  -*-  indent-tabs-mode:nil; coding: utf-8 -*-
-;;  Copyright (C) 2015,2019
+;;  Copyright (C) 2015,2020
 ;;      "Mu Lei" known as "NalaGinrut" <mulei@gnu.org>
 ;;  Pi is free software: you can redistribute it and/or modify
 ;;  it under the terms of the GNU General Public License published
@@ -15,6 +15,7 @@
 ;;  along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (pi primitives)
+  #:use-module (pi utils)
   #:use-module (pi sasm)
   #:use-module (ice-9 match)
   #:use-module ((rnrs) #:select (define-record-type))
@@ -38,7 +39,7 @@
             is-primitive?))
 
 (define *primitives* (make-hash-table))
-(define (symbol->primitive (hash-ref *primitives* x)))
+;;(define (symbol->primitive (hash-ref *primitives* x)))
 (define (is-op-a-primitive? x)
   (and (symbol? x)
        (symbol->primitive x)))
@@ -54,86 +55,100 @@
    (impl procedure?)))
 
 (define-syntax define-primitive
-  (syntax-rules (#:has-side-effect)
+  (syntax-rules (:has-side-effect)
     ((_ (name args ...) body ...)
      (define-primitive
        name #f
        (lambda (args ...) body ...)))
-    ((_ (name args ...) #:has-side-effect body ...)
+    ((_ (name args ...) :has-side-effect body ...)
      (define-primitive 'name #t (lambda (args ...) body ...)))
     ((_ name side-effect? func)
-     (primitive-register!
-      'name
-      (make-primitive
-       'name
-       (procedure-arity func)
-       side-effect?
-       func)))))
+     (define-public
+       name
+       (make-primitive
+        'name
+        (car (procedure-minimum-arity func))
+        side-effect?
+        func)))))
 
+;; halt can associate with primitive `halt', its activity is TOS.
+(define-primitive (prim:halt x)
+  #t)
+
+#;
 (define-primitive (+ args ...)
-  ;; TODO: implemente + operator
-  #t)
+;; TODO: implemente + operator
+#t)
 
+#;
 (define-primitive (set! v e)
-  ;; TODO
-  #t)
+;; TODO
+#t)
 
-(define-record-type special-form)
-(define-typed-record special-form:if (parent special-form)
-  (fields
-   (cnd symbol?)
-   (true symbol?)
-   (false symbol?)))
+;; (define-record-type special-form)
+;; (define-typed-record special-form:if (parent special-form)
+;;   (fields
+;;    (cnd symbol?)
+;;    (true symbol?)
+;;    (false symbol?)))
 
-;; --------------------------------------------
-;; low-level abstraction of primitive
-;; Only used for code generation
-(define-record-type prim (fields name label proc))
+;; ;; --------------------------------------------
+;; ;; low-level abstraction of primitive
+;; ;; Only used for code generation
+;; (define-record-type prim (fields name label proc))
 
-(define (caller-save x) #t)
-(define (callee-save x) #t)
-(define (emit-prim-template arity label . codes)
-  `(,(caller-save arity)
-    (label ,label)
-    ,(callee-save arity)
-    ,@codes
-    (emit-ret)))
+;; (define (caller-save x) #t)
+;; (define (callee-save x) #t)
+;; (define (emit-prim-template arity label . codes)
+;;   `(,(caller-save arity)
+;;     (label ,label)
+;;     ,(callee-save arity)
+;;     ,@codes
+;;     (emit-ret)))
 
-(define (%%add1 x) #t)
-(define-primitive (%add1 x)
-  (emit-prim-template
-   1 "__prim_add1"
-   (%%add1 x)))
+;; ;; halt can associate with primitive `halt', its activity is TOS.
+;; (define (%%halt x) #t)
+;; (define-primitive (%halt x)
+;;   (emit-prim-template
+;;    1 "__prim_halt"
+;;    (%%halt x)))
 
-(define (%%sub1 x) #t)
-(define-primitive (%sub1 x)
-  (emit-prim-template
-   1 "__prim_sub1"
-   (%%sub1 x)))
+;; (define (%%add1 x) #t)
+;; (define-primitive (%add1 x)
+;;   (emit-prim-template
+;;    1 "__prim_add1"
+;;    (%%add1 x)))
 
-(define-primitive (%%add args)
-  (apply + args))
-(define (%add . args)
-  (emit-prim-template
-   #f "__prim_add"
-   (%%add args)))
+;; (define (%%sub1 x) #t)
+;; (define-primitive (%sub1 x)
+;;   (emit-prim-template
+;;    1 "__prim_sub1"
+;;    (%%sub1 x)))
 
-(define-primitive (%%sub args)
-  (apply + args))
-(define-primitive (%sub . args)
-  (emit-prim-template
-   #f "__prim_add"
-   (%%add args)))
+;; (define-primitive (%%add args)
+;;   (apply + args))
+;; (define (%add . args)
+;;   (emit-prim-template
+;;    #f "__prim_add"
+;;    (%%add args)))
 
-(define *primitives-gen*
-  `((1+ . ,(make-prim '1+ "__prim_add1" %add1))
-    (1- . ,(make-prim '1- "__prim_sub1" %sub1))
-    (+  . ,(make-prim '+ "__prim_add"  %add))
-    (-  . ,(make-prim '- "__prim_sub"  %sub))
-    ))
+;; (define-primitive (%%sub args)
+;;   (apply + args))
+;; (define-primitive (%sub . args)
+;;   (emit-prim-template
+;;    #f "__prim_add"
+;;    (%%add args)))
 
-(define (is-primitive-gen? op) (assoc-ref *primitives* op))
+;; (define *primitives-gen*
+;;   `((halt  . ,(make-prim '- "__prim_halt"  %halt))
+;;     (1+ . ,(make-prim '1+ "__prim_add1" %add1))
+;;     (1- . ,(make-prim '1- "__prim_sub1" %sub1))
+;;     (+  . ,(make-prim '+ "__prim_add"  %add))
+;;     (-  . ,(make-prim '- "__prim_sub"  %sub))
+;;     ))
 
-(define (get-prim op)
-  (or (and=> (assq-ref *primitives* op) caddr)
-      (throw 'pi-error "BUG: Invalid primitive!" op)))
+;; (define (is-primitive-gen? op) (assoc-ref *primitives* op))
+
+;; (define (get-prim op)
+;;   (or (and=> (assq-ref *primitives* op) caddr)
+;;       (throw 'pi-error "BUG: Invalid primitive!" op)))

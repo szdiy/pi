@@ -47,13 +47,18 @@
 
 (define-typed-record cps
   (fields
-   (kont (lambda (x) (or (eq? x 'halt) (cps? x))))
+   (kont (lambda (x) (or (eq? x prim:halt) (cps? x))))
    (name id?)
    ;; The result of the current expr will be bound to karg, and be passed to kont
    (karg id?)))
 
-;; halt can associate with primitive `halt', its activity is TOS.
-(define %halt (make-cps 'halt (new-id "kont-") (new-id "k-")))
+(define-typed-record lambda/k (parent cps)
+  (fields
+   (args id-list?)
+   (body cps?)))
+(define* (new-lambdak/k args body #:keys (kont prim:halt) (name (new-id "kont-"))
+                        (karg (new-id "karg-")))
+  (make-lambda/k kont name karg args body))
 
 (define-typed-record bind-special-form/k (parent cps)
   (fields
@@ -61,20 +66,33 @@
    (value cps?)
    (body cps?)))
 
-(define-typed-record lambda/k (parent cps)
-  (fields
-   (args list?)
-   (body cps?)))
-
 (define-typed-record letval/k (parent bind-special-form/k))
+(define* (new-letval/k var value body #:keys (kont prim:halt)
+                       (name (new-id "kont-"))
+                       (karg (new-id "karg-")))
+  (make-letval/k kont name karg var value body))
+
 (define-typed-record letfun/k (parent bind-special-form/k))
+(define* (new-letfun/k var value body #:keys (kont prim:halt)
+                       (name (new-id "kont-"))
+                       (karg (new-id "karg-")))
+  (make-letfun/k kont name karg var value body))
+
 (define-typed-record letcont/k (parent bind-special-form/k))
+(define* (new-letcont/k var value body #:keys (kont prim:halt)
+                        (name (new-id "kont-"))
+                        (karg (new-id "karg-")))
+  (make-letcont/k kont name karg var value body))
 
 (define-typed-record branch/k (parent cps)
   (fields
    (cnd cps?)
    (tbranch letcont/k?)
    (fbranch letcont/k?)))
+(define* (new-branch/k cnd b1 b2 #:keys (kont prim:halt)
+                       (name (new-id "kont-"))
+                       (karg (new-id "karg-")))
+  (make-letcont/k kont name karg cnd b1 b2))
 
 (define-typed-record collection/k (parent cps)
   (fields
@@ -84,20 +102,26 @@
 
 (define-typed-record seq/k (parent cps)
   (fields
-   (exprs list?)))
+   (exprs cps-list?)))
 
 (define-typed-record define/k (parent cps)
   (fields
    (name id?)
    (value cps?)))
 
+(define (applicable? x)
+  (or (letfun/k? x) (primitive? x)))
 (define-typed-record app/k (parent cps)
   (fields
-   (func letfun/k?)
-   (args list?)))
+   (func applicable?)
+   (args id-list?)))
+(define* (new-app/k f args #:keys (kont prim:halt)
+                    (name (new-id "kont-"))
+                    (karg (new-id "karg-")))
+  (make-letcont/k kont name karg f args))
 
 (define (cont-apply f e)
-  (make-app/k 'halt (new-id "kont-") (new-id "k-") f e))
+  (make-app/k prim:halt (new-id "kont-") (new-id "k-") f e))
 
 (define (lambda-desugar cps)
   (match cps
@@ -179,6 +203,7 @@
      ;;(format #t "cfs 4 ~a~%" expr)
      (substitute expr))))
 
+;; cps -> symbol-list -> id-list
 (define (alpha-renaming expr old new)
   (define (rename e)
     (cond
@@ -258,8 +283,63 @@
      (eta-reduction f))
     (($ seq/k ($ cps _ kont name karg) exprs)
      ;;(display "eta-1\n")
-     (eta-reduction (make-seq/k kont name karg (map eta-reduction exprs))))
+     (make-seq/k kont name karg (map eta-reduction exprs)))
     (else expr)))
+
+(define (normalize expr)
+  (fold (lambda (f p) (f p))
+        expr
+        (list beta-reduction
+              eta-reduction)))
+
+(define (normalize/preserving expr)
+  (fold (lambda (f p) (f p))
+        expr
+        (list beta-reduction/preserving
+              eta-reduction)))
+
+(define (comp-cps expr cont)
+  (match expr
+    (('lambda (v ...) body)
+     (let* ((fname (new-id "func-"))
+            (fk (new-id "karg-"))
+            (nv (map new-id v))
+            (fun (alpha-renaming (new-lambda/k v (expr->cps body fk) #:karg fk)
+                                 v nv)))
+       (make-letval/k kont (new-id "kont-") (new-id "karg-")
+                      fname fun
+                      (new-app/k cont fname))))
+    (('let ((v e)) body)
+     (let* ((jname (new-id "jcont-"))
+            (nv (new-id v))
+            (fk (new-id "letcont/k-"))
+            (jcont (alpha-renaming (new-lambda/k v (comp-cps body fk) #:karg fk)
+                                   (list v) (list nv))))
+       (make-letcont/k kont (new-id "kont-") (new-id "karg-")
+                       jname jcont
+                       (alpha-renaming (new-app/k cont fname)
+                                       (list v) (list nv)))))
+    (('if cnd b1 b2)
+     (let* ((arg (new-id))
+            (jname (new-id "jcont-"))
+            (kname (new-id "karg-"))
+            (kont2 (new-letcont/k (new-id "letcont/k-")
+                                  (new-lambda/k '() (expr->cps b2 j))
+                                  (new-branch/k cnd k1 k2)))
+            (kont1 (new-letcont/k (new-id "letcont/k-")
+                                  (new-lambda/k '() (expr->cps b1 j))
+                                  kont2))
+            (kont3
+             ;; According to Kennedy's, we add a local continuation here
+             (new-lambda/k kname
+                           (new-letcont/k
+                            jname
+                            (new-lambda/k (list arg) (new-app/k cont arg))
+                            kont1))))
+       (comp-cps cnd kont3))))
+  (else (expr->cps expr cont)))
+
+;; FIXME: Move all karg to cps, not in args.
 
 (define* (cps->src cps #:optional (hide-begin? #t))
   (match cps

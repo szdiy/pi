@@ -44,7 +44,8 @@
             id-name
             id-orig
             new-id
-            id-eq?))
+            id-eq?
+            id-list?))
 
 (define-record-type constant (fields val type))
 
@@ -117,12 +118,6 @@
 (define (is-immediate? x)
   (any (lambda (c) (c x)) *immediates-pred*))
 
-(define-typed-record primitive
-  (fields
-   (name symbol?)
-   ;; proc is not the final primitive, but it can be used for delta-reduction
-   (proc procedure?)))
-
 (define-typed-record id
   (fields
    (name symbol?)
@@ -142,3 +137,6 @@
     (throw 'pi-error id-eq?
            "Invalid id type: `~a', `~a'" x y))
   (eq? (id-name x) (id-name y)))
+
+(define (id-list? lst)
+  (make-object-list-pred lst id?))
