@@ -1,4 +1,4 @@
-;;  Copyright (C) 2015
+;;  Copyright (C) 2015,2020
 ;;      "Mu Lei" known as "NalaGinrut" <NalaGinrut@gmail.com>
 ;;  This file is free software: you can redistribute it and/or modify
 ;;  it under the terms of the GNU General Public License as published by
@@ -17,16 +17,17 @@
   #:use-module (pi ast)
   #:use-module (pi types)
   #:use-module ((rnrs) #:select (define-record-type))
-  #:export (env env?
+  #:export (env
+            env?
             env-bindings env-prev
-            
+
             top-level-ref
             top-level-set!
-            
+
             extend-env
             binding-ref
             binding-set!
-            
+
             *top-level*
             new-env))
 
@@ -38,11 +39,12 @@
 
 (define (new-env . params)
   (let ((bindings (make-hash-table)))
-    (for-each (lambda (v)
-                ;; NOTE: since each registered param will be guarrented to set a value,
-                ;;       so it's fine we set a special sign 'registered here for debug.
-                (hash-set! bindings (binding-id v) (gen-constant 'registered)))
-              params)
+    (for-each
+     (lambda (v)
+       ;; NOTE: since each registered param will be guarrented to set a value,
+       ;;       so it's fine we set a special sign 'registered here for debug.
+       (hash-set! bindings (binding-id v) (gen-constant 'registered)))
+     params)
     (make-env #f bindings)))
 
 (define *top-level* (new-env))

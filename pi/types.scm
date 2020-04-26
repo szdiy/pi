@@ -24,6 +24,7 @@
             constant-val
             constant-type
             detect-literal-type
+            *pi/unspecified*
             gen-constant
             is-integer-node?
             is-boolean-node?

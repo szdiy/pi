@@ -39,7 +39,7 @@
             is-primitive?))
 
 (define *primitives* (make-hash-table))
-;;(define (symbol->primitive (hash-ref *primitives* x)))
+(define (symbol->primitive x) (hash-ref *primitives* x))
 (define (is-op-a-primitive? x)
   (and (symbol? x)
        (symbol->primitive x)))
