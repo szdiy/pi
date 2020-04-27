@@ -23,6 +23,8 @@
             is-op-a-primitive?
             primitive-register!
 
+            primitive
+            primitive?
             primitive-name
             primitive-arity
             primitive-has-side-effact?

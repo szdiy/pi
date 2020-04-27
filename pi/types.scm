@@ -20,6 +20,7 @@
   #:use-module ((rnrs) #:select (define-record-type))
   #:use-module (srfi srfi-1)
   #:export (constant
+            constant?
             make-constant
             constant-val
             constant-type
@@ -35,11 +36,7 @@
             pred-constant
             is-immediate?
 
-            make-primitive
-            primitive?
-            primitive-name
-            primitive-proc
-
+            id
             make-id
             id?
             id-name
@@ -62,7 +59,7 @@
    ((list? x) 'list)
    ((vector? x) 'vector)
    ((unspecified? x) 'unspecified)
-   (else (throw 'pi-error "Invalid literal type!" x))))
+   (else (throw 'pi-error 'detect-literal-type "Invalid literal type!" x))))
 
 (define *global-constant-type*
   `((unspecified . ,(lambda (_) *pi/unspecified*))

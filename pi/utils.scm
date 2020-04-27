@@ -45,7 +45,9 @@
             make-object-list-pred
             symbol-list?
             any?
-            immediate?))
+            immediate?
+            collection?
+            atom?))
 
 (define (newsym sym) (gensym (symbol->string sym)))
 
@@ -94,31 +96,32 @@
   (for-each (lambda (x) (queue-in! queue x)) lst)
   queue)
 
-
-(define-syntax-rule (type-check o preds ...)
+(define-syntax-rule (type-check tr o preds ...)
   (or (any (lambda (p) (p o)) (list preds ...))
       (throw 'pi-error
-             (format #f "Wrong type, expect ~{`~a'~^,~}"
-                     (list 'preds ...)))))
+             (format #f "Wrong type in ~a, `~a' expect ~{`~a'~^,~}"
+                     'tr o (list 'preds ...)))))
 
 (define-syntax define-typed-record
   (syntax-rules (parent fields)
+    ((_ tr (parent p))
+     (define-record-type tr (parent p)))
     ((_ tr (parent p) (fields (f t t* ...) ...))
      (define-record-type tr
        (parent p)
        (fields (mutable f) ...)
        (protocol
         (lambda (new)
-          (lambda (f ...)
-            (type-check f t t* ...) ...
-            (new f ...))))))
+          (lambda (pf f ...)
+            (type-check tr f t t* ...) ...
+            ((apply new pf) f ...))))))
     ((_ tr (fields (f t t* ...) ...))
      (define-record-type tr
        (fields (mutable f) ...)
        (protocol
         (lambda (new)
           (lambda (f ...)
-            (type-check f t t* ...) ...
+            (type-check tr f t t* ...) ...
             (new f ...))))))))
 
 (define (make-object-list-pred lst check)
@@ -133,5 +136,12 @@
   (or (number? x)
       (string? x)
       (symbol? x)
-      (list? x)
+      ))
+
+(define (collection? x)
+  (or (list? x)
       (pair? x)))
+
+(define (atom? x)
+  (or (immediate? x)
+      (collection? x)))
