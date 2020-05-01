@@ -132,6 +132,9 @@
 
 (define (any? o) #t)
 
+(define (pi-list? x) #f)
+(define (pi-pair? x) #f)
+
 (define (immediate? x)
   (or (number? x)
       (string? x)
@@ -139,8 +142,8 @@
       ))
 
 (define (collection? x)
-  (or (list? x)
-      (pair? x)))
+  (or (pi-list? x)
+      (pi-pair? x)))
 
 (define (atom? x)
   (or (immediate? x)
