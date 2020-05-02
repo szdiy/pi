@@ -20,6 +20,6 @@
   #:use-module (pi pass)
   #:export ())
 
-(define-pass dead-variable-elimination
+(define-pass dead-variable-elimination cps
   (match cps
     #t))

@@ -27,9 +27,12 @@
 
 (define (optimize cps)
   (run-pass
-   dead-variable-elimination
+   function-inline
    dead-function-elimination
-   constant-fold))
+   fold-constant
+   delta-reduction
+   fold-branch
+   dead-variable-elimination))
 
 (define (compile filename)
   (when (not (file-exists? filename))
