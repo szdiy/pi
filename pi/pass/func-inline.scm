@@ -40,27 +40,33 @@
 ;; unfortunately, we don't have env in this direct CPS implementation, so it's
 ;; too hard to trace back the definition of the function.
 ;; NOTE: Must be applied after alpha-renaming.
-(define (%func-inline cps #:optional (refs (make-ref-table cps)))
+(define (func-inline cps #:optional (refs (make-ref-table cps)))
   (define (inlineable-local-func? f) (= 2 (hash-ref refs f 0)))
   (match cps
-    (($ letcont/k _ v e ($ letfun/k _ fname fbody _))
+    (($ letcont/k ($ bind-special-form/k _ _ _
+                     ($ letfun/k ($ bind-special-form/k _ fname fbody _))))
      (when (inlineable-local-func? fname)
        (beta-reduction/preserving
-        (new-app/k (%func-inline e refs) (%func-inline fbody refs)))))
+        (new-app/k (func-inline e refs) (func-inline fbody refs)))))
     (($ app/k _ ($ lambda/k _ v body) e)
      (cond
       ((and (id? e) (topref e))
        => (lambda (func-body)
-            (topdel! e)
-            (beta-reduction/preserving
-             (new-app/k (new-lambda/k v (%func-inline body refs))
-                        (%func-inline func-body refs)))))
-      (else (nwe-app/k (new-lambda/k v (%func-inline body refs)) e))))
-    ((? bind-special-form/k? sf)
+            (top-level-delete! e)
+            (lambda/k-body-set! (app/k-func cps) (func-inline body refs))
+            (app/k-args-set! cps (func-inline func-body refs))
+            (beta-reduction/preserving cps)))
+      (else
+       (lambda/k-body-set! (app/k-func cps) (func-inline body refs))
+       cps)))
+    ((? bind-special-form/k?)
      (bind-special-form/k-value-set!
-      (%func-inline (bind-special-form/k-value sf) refs))
+      cps
+      (func-inline (bind-special-form/k-value cps) refs))
      (bind-special-form/k-body-set!
-      (%func-inline (bind-special-form/k-body sf) refs)))
+      cps
+      (func-inline (bind-special-form/k-body cps) refs))
+     cps)
     (else cps)))
 
 (define-pass function-inline cps func-inline)

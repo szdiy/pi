@@ -23,6 +23,7 @@
 
             top-level-ref
             top-level-set!
+            top-level-delete!
 
             extend-env
             binding-ref
@@ -54,6 +55,9 @@
 
 (define (top-level-set! k v)
   (hash-set! (env-bindings *top-level*) k v))
+
+(define (top-level-delete! k v)
+  (hash-remove! (env-bindings *top-level*) k v))
 
 (define (extend-env to new)
   (env-prev-set! to new))

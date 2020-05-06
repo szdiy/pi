@@ -17,9 +17,60 @@
 (define-module (pi pass dce)
   #:use-module (pi utils)
   #:use-module (pi cps)
-  #:use-module (pi pass)
-  #:export ())
+  #:use-module (pi pass))
 
-(define-pass dead-variable-elimination cps
+;; FIXME: We don't have to compute free-vars redundantly
+(define (is-referenced? cps v)
+  (memq v (free-vars cps)))
+
+(define (dve cps)
   (match cps
-    #t))
+    (($ letcont/k ($ bind-special-form/k _ cv ($ lambda/k _ v body) cont-body))
+     (cond
+      ((is-referenced? body v)
+       (bind-special-form/k-value-set! cps (dve (bind-special-form/k-value cps)))
+       (bind-special-form/k-body-set! cps (dve cont-body))
+       cps)
+      (else (dve body))))
+    ((? bind-special-form/k? sf)
+     (cond
+      ((is-referenced? (bind-special-form/k-body sf) (bind-special-form/k-var sf))
+       (bind-special-form/k-value-set! sf (dve (bind-special-form/k-value sf)))
+       (bind-special-form/k-body-set! sf (dve (bind-special-form/k-body sf)))
+       cps)
+      (else (dve (bind-special-form/k-body sf)))))
+    (($ app/k _ ($ lambda/k _ v body) e)
+     ;; TODO: Here we just keep the variable which is referenced in the body,
+     ;;       however, it is possible to further optimize the body so that the
+     ;;       referencing can be eliminated.
+     ;;       A better way is to do it again after all optimizings.
+     (cond
+      ((is-referenced? body v)
+       (lambda/k-body-set! (app/k-func cps) (dve body))
+       (app/k-args-set! cps (map dve e))
+       cps)
+      (else (dve body))))
+    (($ lambda/k _ v body)
+     (cond
+      ((is-referenced? body v)
+       (lambda/k-body-set! cps (dve body))
+       cps)
+      (else (dve body))))
+    (else cps)))
+
+;; This includes dead-continuation and dead-variable elimination
+(define-pass dead-variable-elimination cps dve)
+
+;; NOTE: Please notice that we've converted local function binding to let-binding
+;;       during AST building step, so the top-level function definition is the only
+;;       thing that I need to take care. Because the local binding will be handled
+;;       by dead-variable-eliminate.
+;;       That's what we concern in dead-fun and fun-inline
+
+;; Removes a function definition if it has no applied occurrences outside
+;; its ownbody.
+(define-pass dead-function-elimination cps
+  (let ((funcs (hash-map->list (lambda (v _) v) *top-level*))
+        (fv (free-vars cps)))
+    (map top-level-delete! (diff funcs fv))
+    cps))
