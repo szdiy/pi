@@ -17,6 +17,7 @@
 (define-module (pi primitives)
   #:use-module (pi utils)
   #:use-module (pi sasm)
+  #:use-module (pi types)
   #:use-module (ice-9 match)
   #:use-module ((rnrs) #:select (define-record-type))
   #:export (symbol->primitive
@@ -75,12 +76,19 @@
 
 ;; halt can associate with primitive `halt', its activity is TOS.
 (define-primitive (prim:halt x)
-  #t)
+  (error 'prim:halt "It's not implemented!"))
 
-#;
-(define-primitive (+ args ...)
-;; TODO: implemente + operator
-#t)
+(define-primitive (prim:+ args ...)
+  (gen-constant (apply + args)))
+
+(define-primitive (prim:- args ...)
+  (gen-constant (apply - args)))
+
+(define-primitive (prim:* args ...)
+  (gen-constant (apply * args)))
+
+(define-primitive (prim:/ args ...)
+  (gen-constant (apply / args)))
 
 #;
 (define-primitive (set! v e)

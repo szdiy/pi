@@ -15,16 +15,19 @@
 ;;  along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (pi pass delta-reduction)
-  #:use-module (pi utils)
+  #:use-module (pi types)
   #:use-module (pi cps)
-  #:use-module (pi pass))
+  #:use-module (pi pass)
+  #:use-module (pi primitives))
 
 (define (cps-integer? cps)
-  )
+  (match cps
+    (($ constant _ _ type) (eq? type 'integer))
+    (else #f)))
 
 ;; primitive -> cps-list -> cps
 (define (prim-apply p args)
-  )
+  (apply (symbol->primitive p) (map constant-val args)))
 
 ;; NOTE: fold-constant must be applied before, otherwise it doesn't work.
 ;; FIXME: Only pure-functional primitives can be reduced.

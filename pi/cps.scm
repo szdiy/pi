@@ -23,15 +23,72 @@
   #:use-module (srfi srfi-1)
   #:use-module (ice-9 match)
   #:use-module ((rnrs) #:select (define-record-type))
-  #:export (ast->cps
-            cps-list?
-            beta-reduction
-            beta-reduction/preserving))
+  #:export (cps-list?
 
-(define-record-type cps ; super type for checking cps types
-  (fields
-   kont   ; The current continuation
-   name)) ; The id of the continuation
+            cps cps?
+            cps-kont cps-kont-set!
+            cps-name cps-name-set!
+            cps-karg cps-karg-set!
+
+            lambda/k lambda/k?
+            lambda/k-args lambda/k-args-set!
+            lambda/k-body lambda/k-body-set!
+            new-lambda/k
+
+            bind-special-form/k bind-special-form/k?
+            bind-special-form/k-var bind-special-form/k-var-set!
+            bind-special-form/k-value bind-special-form/k-value-set!
+            bind-special-form/k-body bind-special-form/k-body-set!
+
+            letval/k letval/k?
+            new-letval/k
+
+            letfun/k letfun/k?
+            new-letfun/k
+
+            letcont/k letcont/k?
+            new-letcont/k
+
+            branch/k branch/k?
+            branch/k-cnd branch/k-cnd-set!
+            branch/k-tbranch branch/k-tbranch-set!
+            branch/k-fbranch branch/k-fbranch-set!
+            new-branch/k
+
+            collection/k collection/k?
+            collection/k-var collection/k-var-set!
+            collection/k-type collection/k-type-set!
+            collection/k-size collection/k-size-set!
+            collection/k-value collection/k-value-set!
+            new-collection/k
+
+            seq/k seq/k?
+            seq/k-exprs seq/k-exprs-set!
+            new-seq/k
+
+            app/k app/k?
+            app/k-func app/k-func-set!
+            app/k-args app/k-args-set!
+            new-app/k
+
+            cont-apply
+            lambda-desugar
+
+            union diff insec
+            free-vars names bound-vars all-ref-vars
+            make-ref-table
+
+            alpha-renaming
+            beta-reduction
+            beta-reduction/preserving
+            eta-reduction
+
+            normalize
+            normalize/preserving
+
+            ast->cps
+            cps->expr
+            top-level->src))
 
 ;; kontext means kontinuation-context
 
@@ -52,10 +109,12 @@
 
 (define-typed-record cps
   (fields
+   ;; the current continuation
+   ;; TODO: capture the current continuation
    (kont (lambda (x) (or (eq? x prim:halt) (cps? x))))
-   (name id?)
+   (name id?) ; the unique name of the continuation
    ;; The result of the current expr will be bound to karg, and be passed to kont
-   (karg id?)))
+   (karg id?))) ; the arg bound to the continuation
 
 (define-typed-record lambda/k (parent cps)
   (fields
