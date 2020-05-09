@@ -57,7 +57,7 @@
   (hash-set! (env-bindings *top-level*) k v))
 
 (define (top-level-delete! k v)
-  (hash-remove! (env-bindings *top-level*) k v))
+  (hash-remove! (env-bindings *top-level*) k))
 
 (define (extend-env to new)
   (env-prev-set! to new))

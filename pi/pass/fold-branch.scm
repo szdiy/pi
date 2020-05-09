@@ -17,7 +17,8 @@
 (define-module (pi pass fold-branch)
   #:use-module (pi types)
   #:use-module (pi cps)
-  #:use-module (pi pass))
+  #:use-module (pi pass)
+  #:use-module (ice-9 match))
 
 ;; NOTE: fold-constant should be applied before.
 ;; NOTE: after eliminate the dead branch, it's necessary to apply
@@ -49,4 +50,4 @@
      (seq/k-set! cps (map fb exprs)))
     (else cps)))
 
-(define-pass fold-branch cps fb)
+(define-pass fold-branch cps (fb cps))

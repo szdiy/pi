@@ -16,7 +16,8 @@
 
 (define-module (pi pass fold-const)
   #:use-module (pi cps)
-  #:use-module (pi pass))
+  #:use-module (pi pass)
+  #:use-module (ice-9 match))
 
 ;; 1. (if 1 2 3) -k-> (if 1 2 3)
 ;; 2. (if 1 2 (+ 3 4)) -k-> (letcont ((k (halt (+ 4 3)))) (if 1 2 k))
@@ -35,4 +36,4 @@
      sf)
     (else cps)))
 
-(define-pass fold-constant cps fc)
+(define-pass fold-constant cps (fc cps))

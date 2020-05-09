@@ -17,7 +17,8 @@
 (define-module (pi pass func-inline)
   #:use-module (pi utils)
   #:use-module (pi cps)
-  #:use-module (pi pass))
+  #:use-module (pi pass)
+  #:use-module (ice-9 match))
 
 ;; The all-ref-vars will count all appear variables, include the local definition,
 ;; so it has to be performed after these two steps:
@@ -69,4 +70,4 @@
      cps)
     (else cps)))
 
-(define-pass function-inline cps func-inline)
+(define-pass function-inline cps (func-inline cps))

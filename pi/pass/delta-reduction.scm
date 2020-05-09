@@ -18,7 +18,8 @@
   #:use-module (pi types)
   #:use-module (pi cps)
   #:use-module (pi pass)
-  #:use-module (pi primitives))
+  #:use-module (pi primitives)
+  #:use-module (ice-9 match))
 
 (define (cps-integer? cps)
   (match cps
@@ -60,4 +61,4 @@
          cps))
     (else cps)))
 
-(define-pass delta-reduction cps delta)
+(define-pass delta-reduction cps (delta cps))

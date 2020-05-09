@@ -15,9 +15,10 @@
 ;;  along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (pi pass dce)
-  #:use-module (pi utils)
+  #:use-module (pi env)
   #:use-module (pi cps)
-  #:use-module (pi pass))
+  #:use-module (pi pass)
+  #:use-module (ice-9 match))
 
 ;; FIXME: We don't have to compute free-vars redundantly
 (define (is-referenced? cps v)
@@ -59,7 +60,7 @@
     (else cps)))
 
 ;; This includes dead-continuation and dead-variable elimination
-(define-pass dead-variable-elimination cps dve)
+(define-pass dead-variable-elimination cps (dve cps))
 
 ;; NOTE: Please notice that we've converted local function binding to let-binding
 ;;       during AST building step, so the top-level function definition is the only

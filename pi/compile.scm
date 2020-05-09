@@ -27,6 +27,7 @@
 
 (define (optimize cps)
   (run-pass
+   cps
    function-inline
    dead-function-elimination
    fold-constant
