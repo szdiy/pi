@@ -139,7 +139,8 @@
   (or (number? x)
       (string? x)
       (symbol? x)
-      ))
+      (vector? x)
+      (number? x)))
 
 (define (collection? x)
   (or (pi-list? x)

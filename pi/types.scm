@@ -61,9 +61,17 @@
    ((unspecified? x) 'unspecified)
    (else (throw 'pi-error 'detect-literal-type "Invalid literal type!" x))))
 
+(define *pi/unspecified* (gen-constant 'unspecified))
+(define *pi/chars* (list->vector
+                    (map (lambda (i) (make-constant 'char (integer->char i)))
+                         (iota 128))))
+(define *pi/true* (make-constant 'boolean #t))
+(define *pi/false* (make-constant 'boolean #f))
+
 (define *global-constant-type*
   `((unspecified . ,(lambda (_) *pi/unspecified*))
-    (char . ,(lambda (c) (vector-ref *pi/chars* (char->integer c))))))
+    (char . ,(lambda (c) (vector-ref *pi/chars* (char->integer c))))
+    (boolean . ,(lambda (b) (if b *pi/true* *pi/false*)))))
 
 (define (global-constant-type? t)
   (assoc-ref *global-constant-type* t))
@@ -77,11 +85,6 @@
 
 (define (pred-constant x type)
   (and (constant? x) (eq? (constant-type x) type)))
-
-(define *pi/unspecified* (gen-constant 'unspecified))
-(define *pi/chars* (list->vector
-                    (map (lambda (i) (make-constant 'char (integer->char i)))
-                         (iota 128))))
 
 (define (is-boolean-node? x) (pred-constant x 'boolean))
 (define (is-char-node? x) (pred-constant x 'char))
