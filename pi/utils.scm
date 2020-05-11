@@ -62,6 +62,9 @@
     (() '()) ; (lambda () ...)
     (else (throw 'pi-error "lambda: parameter must be an identifier!" pattern))))
 
+(define (extract-keys pattern)
+  #f)
+
 (define (%q-remove-with-key! q key)
   (assoc-remove! (car q) key)
   (sync-q! q))

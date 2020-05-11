@@ -39,26 +39,35 @@
 ;; NOTE: we don't support forward-reference, although I'm willing to...
 (define* (parse-it expr #:key (top? #f) (body-begin? #f) (use 'test) (op? #f))
   (match expr
-    (('define pattern e ...)
-     (cond
-      ((or (not top?) (and top? (not body-begin?)))
-       ;; According to R5Rs, there're only two situations to use `define':
-       ;; 1. In the top-level (toplevel definition).
-       ;; 2. In the beginning of body (inner definition).
-       (throw 'pi-error 'parser
-              "definition in expression context, where definitions are not allowed, in form `~a'" expr))
-      ((null? e)
-       ;; R6Rs supports definition without expression, which implies to define
-       ;; a var with the value `unspecifed'.
-       ;; With respect to the future Scheme, we support it anyway.
-       (gen-constant 'unspecified))
-      (else
-       (match pattern
-         ((? symbol? v)
-          (make-def (parse-it (car e) #:body-begin? #t) v))
-         (((? symbol? v) args ...)
-          (make-def (parse-it `(lambda ,args ,@e) #:body-begin? #t) v))
-         (else (throw 'pi-error "define: no pattern to match! `~a'" expr))))))
+    (((or 'define 'define*) pattern e ...)
+     (let ((head (case (car expr)
+                   ((define) 'lambda)
+                   ((define*) 'lambda*))))
+       (cond
+        ((or (not top?) (and top? (not body-begin?)))
+         ;; According to R5Rs, there're only two situations to use `define':
+         ;; 1. In the top-level (toplevel definition).
+         ;; 2. In the beginning of body (inner definition).
+         (throw 'pi-error 'parser
+                "definition in expression context, where definitions are not allowed, in form `~a'" expr))
+        ((null? e)
+         ;; R6Rs supports definition without expression, which implies to define
+         ;; a var with the value `unspecifed'.
+         ;; With respect to the future Scheme, we support it anyway.
+         *pi/unspecified*)
+        (else
+         (match pattern
+           ((? symbol? v)
+            (make-def (parse-it (car e) #:body-begin? #t) v))
+           (((? symbol? v) args ...)
+            (make-def (parse-it `(,head ,args ,@e) #:body-begin? #t) v))
+           (((? keyword? k) rest ...)
+            (when (eq? head 'define)
+              (throw 'pi-error 'parser
+                     "source expression failed to match any pattern in form ~a"
+                     expr))
+            (make-def (parse-it `(define* ,args ,@e) #:body-begin? #t) v))
+           (else (throw 'pi-error "define: no pattern to match! `~a'" expr)))))))
     (('set! id val)
      (cond
       ((symbol? id) (make-assign (parse-it val) (parse-it id)))
@@ -95,119 +104,118 @@
           (parse-it `(if ,tst
                          (begin ,@rhs)
                          (cond ,@rest)))))))
-    (('lambda pattern body)
-     (let* ((ids (extract-ids pattern))
-            (has-opt? (or (pair? pattern) (symbol? pattern)))
-            (keys #f #;(extract-keys pattern)))
-       (make-closure #f (parse-it body #:body-begin? #t) ids keys has-opt?)))
     (('lambda pattern body body* ...)
-     (when (null? body)
-       (throw 'pi-error 'parser "lambda: bad lambda in form `~a'" expr))
-     (let* ((ids (extract-ids pattern))
-            (keys #f #;(extract-keys pattern)))
+     (let* ((ids (extract-ids pattern)))
        (has-opt? (or (pair? pattern) (symbol? pattern))))
      (make-closure (parse-it `(begin ,body ,@body*) #:body-begin? #t)
-                   ids keys has-opt?)))
-  (('begin body ...)
-   (let lp((next body) (p #t) (ret '()))
-     (cond
-      ((null? next) (make-seq (reverse! ret)))
-      (else
-       (match (car next)
-         (('define whatever ...) ; make sure inner definitions are available in a row
-          (lp (cdr next) p (cons (parse-it (car next) #:body-begin? p) ret)))
-         (else (lp (cdr next) #f (cons (parse-it (car next) #:body-begin? #f) ret))))))))
-  (('letrec ((ks vs) ...) body ...)
-   (letrec ((dispatch
-             (lambda (kk vv)
-               (cond
-                ((and (null? kk) (null? vv)) `(begin ,@body))
-                (else `(let ((,(car kk) #f))
-                         ;; NOTE: make sure id is defined before val
-                         (set! ,(car kk) ,(car vv))
-                         ,(dispatch (cdr kk) (cdr vv))))))))
-     (parse-it (dispatch ks vs))))
-  (('let ((ks vs) ...) body ...) ; common let
-   ;; NOTE: All bindings become single binding here by our CPS design
-   (fold (lambda (k v p) (make-binding p k v)) body ks vs)
-   (make-binding body ks vs))
-  (('let id ((ks vs) ...) body ...) ; named let
-   (parse-it `(letrec ((,id (lambda ,@ks ,@body))) (,id ,@vs))))
-  (('let () body ...)
-   (parse-it `(begin ,@body)))
-  (('let* () body ...)
-   (parse-it `(let () ,@body)))
-  (('let* ((ks vs) ...) body ...)
-   (letrec ((dispatch
-             (lambda (kk vv)
-               (cond
-                ((and (null? kk) (null? vv)) `(begin ,@body))
-                (else
-                 ;; NOTE: make sure each ks is defined in order
-                 `(let ((,(car kk) ,(car vv)))
-                    ,(dispatch (cdr kk) (cdr vv))))))))
-     (parse-it (dispatch ks vs))))
-  (('or rest ...)
-   (let ((tmpvar (gensym "or.tmp.var-")))
-     (cond
-      ((null? rest) (gen-constant 'false))
-      ((null? (cdr rest)) (parse-it (car rest)))
-      (else
-       (let ((b1 (tmpvar))
-             (b2 (tmpvar)))
-         (parse-it `((lambda (,b1 ,b2) (if ,b1 ,b1 (,b2)))
-                     ,(car rest) (lambda () (or ,@(cdr rest))))))))))
-  (('and rest ...)
-   (let ((tmpvar (gensym "and.tmp.var-")))
-     (cond
-      ((null? rest) (gen-constant #t))
-      ((null? (cdr rest)) (parse-it (car rest)))
-      (else
-       (let ((b1 (tmpvar))
-             (b2 (tmpvar)))
-         (parse-it `((lambda (,b1 ,b2) (if ,b1 (,b2) ,b1))
-                     ,(car rest) (lambda () (and ,@(cdr rest))))))))))
-  (('quote s) (gen-constant s))
-  (('unquote k) (parse-it k))
-  (('quasiquote q) (parse-it (_quasiquote q)))
-  (('list e ...) (make-collection e 'list (length e)))
-  (('vector e ...) (make-collection e 'vector (vector-length e)))
-  ((op args ...)
-   (let ((f (parse-it op #:use 'value #:op? #t)))
-     (cond
-      ((not f) (throw 'pi-error 'parser "PROC `~a': unbound variable: " op))
-      ((macro? f) ((macro-expander f) args))
-      (else (make-call #f f (map (lambda (e) (parse-it e #:use 'value)) args))))))
-  ((? symbol? k) (make-ref #f k))
-  ;; NOTE: immediate check has to be the last one!!!
-  ((? is-immediate? i) (gen-constant i))
-  ((? string? s) (throw 'pi-error 'parser "Sorry but string is not ready yet!"))
-  (else
-   (throw 'pi-error 'parser
-          "source expression failed to match any pattern in form `~a'"
-          expr))))
+                   ids #f has-opt?))
+    (('lambda* pattern body body* ...)
+     (throw 'pi-error 'parser "Sorry but lambda* is not prepared yet!")
+     (let* ((ids (extract-ids pattern))
+            (keys (extract-keys pattern)))
+       (has-opt? (or (pair? pattern) (symbol? pattern))))
+     (make-closure (parse-it `(begin ,body ,@body*) #:body-begin? #t)
+                   ids keys has-opt?))
+    (('begin body ...)
+     (let lp((next body) (p #t) (ret '()))
+       (cond
+        ((null? next) (make-seq (reverse! ret)))
+        (else
+         (match (car next)
+           (('define whatever ...) ; make sure inner definitions are available in a row
+            (lp (cdr next) p (cons (parse-it (car next) #:body-begin? p) ret)))
+           (else (lp (cdr next) #f (cons (parse-it (car next) #:body-begin? #f) ret))))))))
+    (('letrec ((ks vs) ...) body ...)
+     (letrec ((dispatch
+               (lambda (kk vv)
+                 (cond
+                  ((and (null? kk) (null? vv)) `(begin ,@body))
+                  (else `(let ((,(car kk) #f))
+                           ;; NOTE: make sure id is defined before val
+                           (set! ,(car kk) ,(car vv))
+                           ,(dispatch (cdr kk) (cdr vv))))))))
+       (parse-it (dispatch ks vs))))
+    (('let ((ks vs) ...) body ...) ; common let
+     ;; NOTE: All bindings become single binding here by our CPS design
+     (fold (lambda (k v p) (make-binding p k v)) body ks vs)
+     (make-binding body ks vs))
+    (('let id ((ks vs) ...) body ...) ; named let
+     (parse-it `(letrec ((,id (lambda ,@ks ,@body))) (,id ,@vs))))
+    (('let () body ...)
+     (parse-it `(begin ,@body)))
+    (('let* () body ...)
+     (parse-it `(let () ,@body)))
+    (('let* ((ks vs) ...) body ...)
+     (letrec ((dispatch
+               (lambda (kk vv)
+                 (cond
+                  ((and (null? kk) (null? vv)) `(begin ,@body))
+                  (else
+                   ;; NOTE: make sure each ks is defined in order
+                   `(let ((,(car kk) ,(car vv)))
+                      ,(dispatch (cdr kk) (cdr vv))))))))
+       (parse-it (dispatch ks vs))))
+    (('or rest ...)
+     (let ((tmpvar (gensym "or.tmp.var-")))
+       (cond
+        ((null? rest) (gen-constant 'false))
+        ((null? (cdr rest)) (parse-it (car rest)))
+        (else
+         (let ((b1 (tmpvar))
+               (b2 (tmpvar)))
+           (parse-it `((lambda (,b1 ,b2) (if ,b1 ,b1 (,b2)))
+                       ,(car rest) (lambda () (or ,@(cdr rest))))))))))
+    (('and rest ...)
+     (let ((tmpvar (gensym "and.tmp.var-")))
+       (cond
+        ((null? rest) (gen-constant #t))
+        ((null? (cdr rest)) (parse-it (car rest)))
+        (else
+         (let ((b1 (tmpvar))
+               (b2 (tmpvar)))
+           (parse-it `((lambda (,b1 ,b2) (if ,b1 (,b2) ,b1))
+                       ,(car rest) (lambda () (and ,@(cdr rest))))))))))
+    (('quote s) (gen-constant s))
+    (('unquote k) (parse-it k))
+    (('quasiquote q) (parse-it (_quasiquote q)))
+    (('list e ...) (make-collection e 'list (length e)))
+    (('vector e ...) (make-collection e 'vector (vector-length e)))
+    ((op args ...)
+     (let ((f (parse-it op #:use 'value #:op? #t)))
+       (cond
+        ((not f) (throw 'pi-error 'parser "PROC `~a': unbound variable: " op))
+        ((macro? f) ((macro-expander f) args))
+        (else (make-call #f f (map (lambda (e) (parse-it e #:use 'value)) args))))))
+    ((? symbol? k) (make-ref #f k))
+    ;; NOTE: immediate check has to be the last one!!!
+    ((? is-immediate? i) (gen-constant i))
+    ((? string? s) (throw 'pi-error 'parser "Sorry but string is not ready yet!"))
+    (else
+     (throw 'pi-error 'parser
+            "source expression failed to match any pattern in form `~a'"
+            expr))))
 
 (define (parser expr)
-(parse-it expr #:top? #t #:body-begin? #t))
+  (parse-it expr #:top? #t #:body-begin? #t))
 
 (define* (ast->src node #:optional (hide-begin? #t))
-(match node
-  (($ constant _ val type) (unless (eq? 'unspecified type) val))
-  (($ def ($ ast _ subx) v) `(define ,(ast->src v) ,(ast->src subx)))
-  (($ ref _ v) (ast->src v))
-  (($ assign ($ ast _ subx) v) `(set! ,(ast->src v) ,(ast->src subx)))
-  (($ cnd ($ ast _ subx))
-   (match subx
-     ((c b1 b2) `(if ,(ast->src c) ,(ast->src b1 #f) ,(ast->src b2 #f)))
-     (else (throw 'pi-error "I don't know what's wrong dude!!!" subx))))
-  (($ pcall _ op args) `(,(prim-name op) ,@(map ast->src args)))
-  (($ call _ op args) `(,(ast->src op) ,@(map ast->src args)))
-  (($ closure ($ ast _ subx) params _) `(lambda ,(map ast->src params) ,(ast->src subx)))
-  (($ seq ($ ast _ subx))
-   (cond
-    ((zero? (length subx)) (throw 'pi-error "Well, null seq dude huh??"))
-    ((= (length subx) 1) (ast->src (car subx)))
-    (hide-begin? (map ast->src subx))
-    (else `(begin ,@(map ast->src subx)))))
-  (($ var ($ binding _ id) uid _) id)
-  (else node)))
+  (match node
+    (($ constant _ val type) (unless (eq? 'unspecified type) val))
+    (($ def ($ ast _ subx) v) `(define ,(ast->src v) ,(ast->src subx)))
+    (($ ref _ v) (ast->src v))
+    (($ assign ($ ast _ subx) v) `(set! ,(ast->src v) ,(ast->src subx)))
+    (($ cnd ($ ast _ subx))
+     (match subx
+       ((c b1 b2) `(if ,(ast->src c) ,(ast->src b1 #f) ,(ast->src b2 #f)))
+       (else (throw 'pi-error "I don't know what's wrong dude!!!" subx))))
+    (($ pcall _ op args) `(,(prim-name op) ,@(map ast->src args)))
+    (($ call _ op args) `(,(ast->src op) ,@(map ast->src args)))
+    (($ closure ($ ast _ subx) params _) `(lambda ,(map ast->src params) ,(ast->src subx)))
+    (($ seq ($ ast _ subx))
+     (cond
+      ((zero? (length subx)) (throw 'pi-error "Well, null seq dude huh??"))
+      ((= (length subx) 1) (ast->src (car subx)))
+      (hide-begin? (map ast->src subx))
+      (else `(begin ,@(map ast->src subx)))))
+    (($ var ($ binding _ id) uid _) id)
+    (else node)))

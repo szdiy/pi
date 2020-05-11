@@ -1,5 +1,5 @@
 ;;  -*-  indent-tabs-mode:nil; coding: utf-8 -*-
-;;  Copyright (C) 2015
+;;  Copyright (C) 2015,2020
 ;;      "Mu Lei" known as "NalaGinrut" <mulei@gnu.org>
 ;;  Pi is free software: you can redistribute it and/or modify
 ;;  it under the terms of the GNU General Public License published
@@ -16,6 +16,8 @@
 
 (define-module (pi codegen)
   #:use-module (pi types)
+  #:use-module (pi cps)
+  #:use-module (pi sasm)
   #:use-module (ice-9 match)
   #:use-module (ice-9 format)
   #:export ())
@@ -27,10 +29,12 @@
       (throw 'pi-error "Invalid integer value!" i)))
 
 (define (emit-boolean b)
-  (case b
-    ((true) (current-backend-true))
-    ((false) (current-backend-false))
-    (else (throw 'pi-error "Invalid boolean value!" b))))
+  (match b
+    (($ constant _ 'boolean v)
+     (if v
+         (sasm-true)
+         (sasm-false)))
+    (else (throw 'pi-error 'emit-boolean "Invalid boolean value `~a'!" b))))
 
 (define (emit-char c)
   (if (char? c)
@@ -70,5 +74,4 @@
      ((? var? var)
       #t)
      (
-     (else #t)))))
-
+      (else #t)))))
