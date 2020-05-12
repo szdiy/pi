@@ -15,12 +15,14 @@
 ;;  along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (pi codegen)
+  #:use-module (pi primitives)
+  #:use-module (pi utils)
   #:use-module (pi types)
   #:use-module (pi cps)
   #:use-module (pi sasm)
   #:use-module (ice-9 match)
   #:use-module (ice-9 format)
-  #:export ())
+  #:export (cps->sasm))
 
 ;; For now, we just support 32bit integer
 (define (emit-integer i)
@@ -63,6 +65,14 @@
          (stk (stk-extend #f nb-push
                           (stk-discard nb-pop (env-local env)))))
     (ctx-add-instr (ctx-change-env ctx (env-change-local env stk)) instr)))
+
+(define (cps->sasm cps)
+  (match cps
+    (($ lambda/k ($ cps _ _ label _) args body)
+     (sasm-label-begin label)
+     (sasm-closure-prelude (length args))
+     (sasm-label-end label)
+     )))
 
 (define (codegen expr ctx)
   (sasm-emit
