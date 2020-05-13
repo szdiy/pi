@@ -21,6 +21,7 @@
   #:use-module (pi primitives)
   #:use-module (ice-9 match)
   #:use-module (srfi srfi-1)
+  #:use-module (srfi srfi-11)
   #:export (parser ast->src))
 
 ;; NOTE: we don't allow primitives-redefine, so this list is for checking.
@@ -37,36 +38,39 @@
     (else `(quote ,obj))))
 
 ;; NOTE: we don't support forward-reference, although I'm willing to...
-(define* (parse-it expr #:key (top? #f) (body-begin? #f) (use 'test) (op? #f))
+(define* (parse-it expr #:key (pos 'toplevel) (body-begin? #f) (use 'test) (op? #f))
   (match expr
     (((or 'define 'define*) pattern e ...)
      (let ((head (case (car expr)
                    ((define) 'lambda)
                    ((define*) 'lambda*))))
+       ;; TODO: local define -> let binding
+       ;;       We need to handle all the local definitions in a row
        (cond
-        ((or (not top?) (and top? (not body-begin?)))
-         ;; According to R5Rs, there're only two situations to use `define':
+        ((and (eq? pos 'closure-level) (not body-begin?))
+         ;; According to R5Rs, there're only two situations to use
+         ;; `define':
          ;; 1. In the top-level (toplevel definition).
          ;; 2. In the beginning of body (inner definition).
          (throw 'pi-error 'parser
-                "definition in expression context, where definitions are not allowed, in form `~a'" expr))
+                "Definition is only allowd in the top of context" expr))
         ((null? e)
          ;; R6Rs supports definition without expression, which implies to define
          ;; a var with the value `unspecifed'.
          ;; With respect to the future Scheme, we support it anyway.
          *pi/unspecified*)
         (else
-         (match pattern
-           ((? symbol? v)
-            (make-def (parse-it (car e) #:body-begin? #t) v))
-           (((? symbol? v) args ...)
-            (make-def (parse-it `(,head ,args ,@e) #:body-begin? #t) v))
-           (((? keyword? k) rest ...)
+         (match expr
+           (('define (? symbol? var) val)
+            (make-def (parse-it val #:body-begin? #t) var))
+           (('define ((? symbol? var) args ...) body ...)
+            (make-def (parse-it `(,head ,args ,@body) #:body-begin? #t) var))
+           ((_ ((? symbol var) (? args-with-keys args)) body ...)
             (when (eq? head 'define)
               (throw 'pi-error 'parser
-                     "source expression failed to match any pattern in form ~a"
+                     "Source expression failed to match any pattern in form ~a"
                      expr))
-            (make-def (parse-it `(define* ,args ,@e) #:body-begin? #t) v))
+            (make-def (parse-it `(define* ,args ,@body) #:body-begin? #t) var))
            (else (throw 'pi-error "define: no pattern to match! `~a'" expr)))))))
     (('set! id val)
      (cond
@@ -93,7 +97,7 @@
        ;; as a built-in special form here. It'd be a macro (external special form) in the future.
        (match body
          ((('else rhs ...))
-          (parse-it `(begin ,@rhs)))
+          (parse-it `(begin ,@rhs) #:pos 'closure-level #:body-begin? #t))
          (((tst '=> rhs) rest ...)
           (let ((x (tmpvar)))
             (parse-it `(let ((,x ,tst))
@@ -107,24 +111,44 @@
     (('lambda pattern body body* ...)
      (let* ((ids (extract-ids pattern)))
        (has-opt? (or (pair? pattern) (symbol? pattern))))
-     (make-closure (parse-it `(begin ,body ,@body*) #:body-begin? #t)
+     (make-closure (parse-it `(begin ,body ,@body*)
+                             #:pos 'closure-level #:body-begin? #t)
                    ids #f has-opt?))
     (('lambda* pattern body body* ...)
      (throw 'pi-error 'parser "Sorry but lambda* is not prepared yet!")
      (let* ((ids (extract-ids pattern))
             (keys (extract-keys pattern)))
        (has-opt? (or (pair? pattern) (symbol? pattern))))
-     (make-closure (parse-it `(begin ,body ,@body*) #:body-begin? #t)
+     (make-closure (parse-it `(begin ,body ,@body*)
+                             #:pos 'closure-level #:body-begin? #t)
                    ids keys has-opt?))
     (('begin body ...)
-     (let lp((next body) (p #t) (ret '()))
-       (cond
-        ((null? next) (make-seq (reverse! ret)))
-        (else
-         (match (car next)
-           (('define whatever ...) ; make sure inner definitions are available in a row
-            (lp (cdr next) p (cons (parse-it (car next) #:body-begin? p) ret)))
-           (else (lp (cdr next) #f (cons (parse-it (car next) #:body-begin? #f) ret))))))))
+     (cond
+      ((eq? pos 'closure-level)
+       ;; Internal definition:
+       ;; definition should be transformed to local bindings.
+       (let-values (((rest defs) (get-all-defs e)))
+         (parse-it (fold (lambda (x p)
+                           (match x
+                             ;; FIXME: Should be letrec*
+                             (('define var expr) `(let* ((,var ,expr)) ,p))
+                             (else (throw 'pi-error 'parser
+                                          "Invalid local definition `~a'!" x))))
+                         `(begin ,@rest) defs)
+                   #:pos 'closure-level #:body-begin? #f)))
+      (else
+       ;; definition is in begin expr, but not in closure-toplevel, so the
+       ;; definition is top level definition.
+       (let lp((next body) (p #t) (ret '()))
+         (cond
+          ((null? next) (make-seq (reverse! ret)))
+          (else
+           (match (car next)
+             ;; make sure inner definitions are available in a row
+             (('define whatever ...)
+              (lp (cdr next) p (cons (parse-it (car next) #:body-begin? p) ret)))
+             (else (lp (cdr next) #f
+                       (cons (parse-it (car next) #:body-begin? #f) ret))))))))))
     (('letrec ((ks vs) ...) body ...)
      (letrec ((dispatch
                (lambda (kk vv)
@@ -196,7 +220,7 @@
             expr))))
 
 (define (parser expr)
-  (parse-it expr #:top? #t #:body-begin? #t))
+  (parse-it expr #:body-begin? #t))
 
 (define* (ast->src node #:optional (hide-begin? #t))
   (match node

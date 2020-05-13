@@ -47,7 +47,9 @@
             any?
             immediate?
             collection?
-            atom?))
+            atom?
+            args-with-keys
+            get-all-defs))
 
 (define (newsym sym) (gensym (symbol->string sym)))
 
@@ -152,3 +154,19 @@
 (define (atom? x)
   (or (immediate? x)
       (collection? x)))
+
+(define (args-with-keys args)
+  (any keyword? args))
+
+(define (get-all-defs exprs)
+  (let lp ((e exprs) (ret '()))
+    (when (null? e)
+      (throw 'pi-error 'get-all-defs
+             "No expressions in body in form `~a'" exprs))
+    (match (car e)
+      (('define rest ...) (lp (cdr e) (cons (car e) ret)))
+      (else
+       (if (null? (cdr e))
+           (throw 'pi-error 'get-all-defs
+                  "No expressions in body in form `~a'" exprs)
+           (values (cdr e) (reverse ret)))))))

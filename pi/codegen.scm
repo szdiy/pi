@@ -71,8 +71,9 @@
     (($ lambda/k ($ cps _ _ label _) args body)
      (sasm-label-begin label)
      (sasm-closure-prelude (length args))
-     (sasm-label-end label)
-     )))
+     (sasm-label-end label))
+
+    ))
 
 (define (codegen expr ctx)
   (sasm-emit
