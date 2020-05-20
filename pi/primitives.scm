@@ -58,36 +58,37 @@
    (impl procedure?)))
 
 (define-syntax define-primitive
-  (syntax-rules (:has-side-effect)
-    ((_ (name args ...) body ...)
-     (define-primitive
-       name #f
-       (lambda (args ...) body ...)))
-    ((_ (name args ...) :has-side-effect body ...)
-     (define-primitive 'name #t (lambda (args ...) body ...)))
-    ((_ name side-effect? func)
-     (define-public
-       name
-       (make-primitive
-        'name
-        (car (procedure-minimum-arity func))
-        side-effect?
-        func)))))
+  (lambda (x)
+    (syntax-case x (:has-side-effect)
+      ((_ (name0 args0 ...) body0 ...)
+       #`(define-primitive
+           name0 #f
+           (lambda (args0 ...) body0 ...)))
+      ((_ (name1 args0 ...) :has-side-effect body0 ...)
+       #`(define-primitive name1 #t (lambda (args0 ...) body0 ...)))
+      ((_ name side-effect? func)
+       #`(define-public
+           #,(datum->syntax #'name (symbol-append 'prim: (syntax->datum #'name)))
+           (make-primitive
+            'name
+            (car (procedure-minimum-arity func))
+            side-effect?
+            func))))))
 
 ;; halt can associate with primitive `halt', its activity is TOS.
-(define-primitive (prim:halt x)
+(define-primitive (halt x)
   (error 'prim:halt "It's not implemented!"))
 
-(define-primitive (prim:+ args ...)
+(define-primitive (+ args ...)
   (gen-constant (apply + args)))
 
-(define-primitive (prim:- args ...)
+(define-primitive (- args ...)
   (gen-constant (apply - args)))
 
-(define-primitive (prim:* args ...)
+(define-primitive (* args ...)
   (gen-constant (apply * args)))
 
-(define-primitive (prim:/ args ...)
+(define-primitive (/ args ...)
   (gen-constant (apply / args)))
 
 #;

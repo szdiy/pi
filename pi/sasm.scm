@@ -16,6 +16,7 @@
 
 (define-module (pi sasm)
   #:use-module (pi utils)
+  #:use-module (srfi srfi-1)
   #:use-module (ice-9 match)
   #:export (sasm-emit
             get-all-sasm
@@ -70,8 +71,8 @@
            (('closure-prelude argc)
             (format port "~a) ; Clean end~%" (indent-spaces))
             (indent-spaces 'out))
-           (else (throw 'pi-error 'sasm-output "Invalid pattern `~a'!" pattern)))))
-      (get-all-sasm)
+           (else (throw 'pi-error 'sasm-output "Invalid pattern `~a'!" pattern))))
+       (get-all-sasm))
       (format port ") ; End LEF~%"))))
 
 (define (sasm-emit expr) (queue-in! *sasm-queue* expr))

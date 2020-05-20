@@ -21,6 +21,7 @@
   #:use-module ((rnrs) #:select (define-record-type))
   #:export (newsym
             extract-ids
+            extract-keys
             new-stack
             new-queue
             stack-slots

@@ -32,9 +32,6 @@
 
             branch make-branch branch?
 
-            pcall make-pcall pcall?
-            pcall-op pcall-args
-
             call make-call call?
             call-op call-args
 
@@ -49,6 +46,9 @@
             var make-var var?
             var-uid var-global?
             new-var
+
+            collection make-collection collection?
+            collection-type collection-size
 
             ->special-form
 

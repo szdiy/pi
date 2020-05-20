@@ -61,7 +61,7 @@
    ((unspecified? x) 'unspecified)
    (else (throw 'pi-error 'detect-literal-type "Invalid literal type!" x))))
 
-(define *pi/unspecified* (gen-constant 'unspecified))
+(define *pi/unspecified* (make-constant 'unspecified 'unspecified))
 (define *pi/chars* (list->vector
                     (map (lambda (i) (make-constant 'char (integer->char i)))
                          (iota 128))))

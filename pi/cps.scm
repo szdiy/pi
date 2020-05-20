@@ -407,7 +407,7 @@
      (let* ((fname (new-id "func-"))
             (fk (new-id "karg-"))
             (nv (map new-id params))
-            (fun (alpha-renaming (new-lambda/k params (expr->cps body fk)
+            (fun (alpha-renaming (new-lambda/k params (ast->cps body fk)
                                                #:karg fk #:kont cont)
                                  params nv)))
        (new-letfun/k fname fun (new-app/k cont fname #:kont cont) #:kont cont)))
@@ -419,7 +419,7 @@
                     (new-lambda/k (list nv) (comp-cps body cont) #:kont cont)
                     (list var) (list nv))))
        (new-letcont/k jname jcont
-                      (alpha-renaming (expr->cps val jname) (list var) (list nv))
+                      (alpha-renaming (ast->cps val jname) (list var) (list nv))
                       #:kont cont)))
     (($ branch ($ ast _ (cnd b1 b2)))
      (let* ((arg (new-id))
@@ -427,10 +427,10 @@
             (kname (new-id "karg-"))
             (k1 (new-id "letcont/k-"))
             (k2 (new-id "letcont/k-"))
-            (kont2 (new-letcont/k k2 (new-lambda/k '() (expr->cps b2 jname)
+            (kont2 (new-letcont/k k2 (new-lambda/k '() (ast->cps b2 jname)
                                                    #:kont cont)
                                   (new-branch/k kname k1 k2 #:kont cont)))
-            (kont1 (new-letcont/k k1 (new-lambda/k '() (expr->cps b1 jname)
+            (kont1 (new-letcont/k k1 (new-lambda/k '() (ast->cps b1 jname)
                                                    #:kont cont)
                                   kont2))
             (kont3
@@ -442,9 +442,9 @@
                                           #:kont cont)
                             kont1) #:kont cont)))
        (comp-cps cnd kont3)))
-    (else (expr->cps expr cont))))
+    (else (ast->cps expr cont))))
 
-(define* (expr->cps expr #:optional (cont prim:halt))
+(define* (ast->cps expr #:optional (cont prim:halt))
   (match expr
     ;; FIXME: distinct value and function for the convenient of fun-inline.
     (($ closure ($ ast _ body) params _ _)
@@ -452,23 +452,23 @@
             (fk (new-id "karg-"))
             (nv (map new-id params))
             (fun (alpha-renaming
-                  (new-lambda/k nv (expr->cps body fk) #:karg fk)
+                  (new-lambda/k nv (ast->cps body fk) #:karg fk)
                   params nv)))
        (new-letfun/k fname fun (new-app/k cont fname) #:kont cont)))
     (($ def ($ ast _ body) var)
      ;; NOTE: The local function definition should be converted to let-binding
      ;;       by AST builder. So the definition that appears here are top-level.
-     (top-level-set! var (expr->cps body cont))
+     (top-level-set! var (ast->cps body cont))
      *pi/unspecified*)
     (($ binding ($ ast _ body) var val)
      (let* ((jname (new-id "jcont-"))
             (nv (new-id var))
             (fk (new-id "letcont/k-"))
             (jcont (alpha-renaming
-                    (new-lambda/k (list nv) (expr->cps body cont) #:kont cont)
+                    (new-lambda/k (list nv) (ast->cps body cont) #:kont cont)
                     (list var) (list nv))))
        (new-letcont/k jname jcont
-                      (alpha-renaming (expr->cps val jname) (list var) (list nv))
+                      (alpha-renaming (ast->cps val jname) (list var) (list nv))
                       #:kont cont)))
     (($ branch ($ ast _ (cnd b1 b2)))
      (let* ((arg (new-id))
@@ -476,9 +476,9 @@
             (kname (new-id "karg-"))
             (k1 (new-id "letcont/k-"))
             (k2 (new-id "letcont/k-"))
-            (kont2 (new-letcont/k k2 (new-lambda/k '() (expr->cps b2 jname))
+            (kont2 (new-letcont/k k2 (new-lambda/k '() (ast->cps b2 jname))
                                   (new-branch/k kname k1 k2) #:kont cont))
-            (kont1 (new-letcont/k k1 (new-lambda/k '() (expr->cps b1 jname)
+            (kont1 (new-letcont/k k1 (new-lambda/k '() (ast->cps b1 jname)
                                                    #:kont cont)
                                   kont2 #:kont cont))
             (kont3 (new-lambda/k (list kname) kont1 #:kont cont)))
@@ -486,13 +486,13 @@
     (($ collection ($ ast _ vals) type size)
      (let ((cname (new-id "c-"))
            (ex (map (lambda (_) (new-id "e-")) vals)))
-       (fold (lambda (ee ex p) (expr->cps ee (new-lambda/k ex p #:kont cont)))
+       (fold (lambda (e x p) (ast->cps e (new-lambda/k x p #:kont cont)))
              (new-collection/k cname type size ex (new-app/k cont cname #:kont cont)
                                #:kont cont)
-             e ex)))
+             vals ex)))
     (($ seq ($ ast _ e))
      (let* ((el (fold (lambda (x p)
-                        (let ((ret (expr->cps x cont)))
+                        (let ((ret (ast->cps x cont)))
                           (if (is-unspecified-node? ret) p (cons ret p))))
                       '() e))
             (ev (map (lambda (_) (new-id "k-")) el)))
@@ -511,17 +511,18 @@
        (comp-cps f (new-lambda/k (list fn) k #:kont cont))))
     (($ ref _ sym)
      (cond
-      ((is-op-a-primitive? sym) (new-app/k cont (symbol->primitive p) #:kont cont))
-      ((symbol? s) (new-id s))
-      (else (throw 'pi-error 'expr->cps "BUG: ref should be symbol! `~a'" sym))))
-    ((id? sym) (new-app/k cont x #:kont cont))
+      ((is-op-a-primitive? sym)
+       (new-app/k cont (symbol->primitive sym) #:kont cont))
+      ((symbol? sym) (new-app/k cont (new-id sym) #:kont cont))
+      (else (throw 'pi-error 'ast->cps "BUG: ref should be symbol! `~a'" sym))))
+    ((id? sym) (new-app/k cont sym #:kont cont))
     ((? constant? c)
      (let ((x (new-id "x-")))
        (new-letval/k x c (new-app/k cont x #:kont cont) #:kont cont)))
     ;; TODO: Add more:
     ;; set!
     ;; collection-set! collection-ref
-    (else (throw 'pi-error 'expr->cps "Wrong expr: " expr))))
+    (else (throw 'pi-error 'ast->cps "Wrong expr: " expr))))
 
 ;; FIXME: Move all karg to cps, not in args.
 

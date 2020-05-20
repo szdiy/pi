@@ -35,6 +35,8 @@
    Performing beta and eta reduction to archieve normal forms.
 ** Unbox
 Represent the value with a single CPU machine word in replace of a pointer.
+** Closure conversion
+A transformation to make all closures close.
 * Design
 ** Primitive types
 All primitive types are wrapped into cps-value
@@ -55,6 +57,11 @@ cons, list, vector
   )
 #+end_src
 ** String
+** Closure
+In lambdabit, all closures are allocated in the heap, so we don't have to do escape analysis for escaped closures.
+** Active record
+In CPS compiler, we dispense entirely active record, and use closures extensively.
+The suspended function was replaced by the continuation.
 * CPS
 ** Two flavors CPS
 *** Higher order CPS
