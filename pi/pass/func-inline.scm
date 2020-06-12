@@ -44,7 +44,7 @@
 (define (func-inline cps #:optional (refs (make-ref-table cps)))
   (define (inlineable-local-func? f) (= 2 (hash-ref refs f 0)))
   (match cps
-    (($ letcont/k ($ bind-special-form/k _ _ _
+    (($ letcont/k ($ bind-special-form/k _ _ e
                      ($ letfun/k ($ bind-special-form/k _ fname fbody _))))
      (when (inlineable-local-func? fname)
        (beta-reduction/preserving

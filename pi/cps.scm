@@ -35,6 +35,11 @@
             lambda/k-body lambda/k-body-set!
             new-lambda/k
 
+            closure/k closure/k?
+            closure/k-env closure/k-env-set!
+            closure/k-body closure/k-body-set!
+            new-closure/k
+
             bind-special-form/k bind-special-form/k?
             bind-special-form/k-var bind-special-form/k-var-set!
             bind-special-form/k-value bind-special-form/k-value-set!
@@ -132,6 +137,14 @@
                        (karg (new-id "karg-")))
   (make-lambda/k (list kont name karg) args body))
 
+(define-typed-record closure/k (parent cps)
+  (fields
+   (env id-list?)
+   (body valid-expr?)))
+(define* (new-closure/k args body #:key (kont prim:halt) (name (new-id "kont-"))
+                        (karg (new-id "karg-")))
+  (make-lambda/k (list kont name karg) env body))
+
 (define-typed-record bind-special-form/k (parent cps)
   (fields
    (var id?)
@@ -187,7 +200,7 @@
   (make-seq/k (list kont name karg) exprs))
 
 (define (applicable? x)
-  (or (letfun/k? x) (primitive? x) (lambda/k? x)
+  (or (letfun/k? x) (primitive? x) (lambda/k? x) (closure/k? x)
       ;; FIXME: Not all id, should be the registered proc id
       (id? x)))
 (define (valid-arg? x)

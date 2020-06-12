@@ -44,7 +44,7 @@
      (lambda (v)
        ;; NOTE: since each registered param will be guarrented to set a value,
        ;;       so it's fine we set a special sign 'registered here for debug.
-       (hash-set! bindings (binding-id v) (gen-constant 'registered)))
+       (hash-set! bindings v 'registered))
      params)
     (make-env #f bindings)))
 
