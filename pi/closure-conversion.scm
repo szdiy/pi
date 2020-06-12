@@ -20,60 +20,65 @@
   #:use-module (pi cps)
   #:use-module (pi env)
   #:use-module (ice-9 match)
-  #:use-module ((srfi srfi-1) #:select (zip lset-intersection))
+  #:use-module ((srfi srfi-1) #:select (fold))
   #:use-module ((rnrs) #:select (define-record-type))
   #:export (closure-conversion))
 
-(define (bind-el! env el)
-  (for-each (lambda (x) (binding-set! env (car x) (cadr x))) el))
+;; Add free vars
+(define (add-frees! env frees)
+  (let ((ef (env-frees env)))
+    (for-each (lambda (fv) (queue-in! ef fv)) frees)))
 
-(define (free-bindings el expr)
-  (define (get-free-var expr)
-    (let ((fv (free-vars expr)))
-      (zip fv (map (const 'registered) (iota (length fv))))))
-  (define (bind-eq? x y)
-    (id-eq? (car x) (car y)))
-  (apply lset-intersection bind-eq? el (free-var expr)))
+(define (alive-frees env expr)
+  (let ((outter-frees (queue-slot (env-frees env)))
+        (inner-frees (free-vars expr)))
+    (fold (lambda (x p)
+            (if (env-exists? env x)
+                (cons x p)
+                p))
+          '() (queue-slot (env-frees env)))))
 
 ;; NOTE:
-;; 1. We only perform CC after DCE, so there's no unused binding
-;; 2.
-(define* (closure-conversion cps #:optional (el '()))
-  (define (add-to-env k v)
-    (cond
-     ((null? el)
-      (top-level-set! k v)
-      el)
-     (else (cons (cons k v) el))))
+;; 1. We only perform CC after DCE, so there's no unused binding.
+;; 2. We distinct local bindings and free vars. Both of them are ordered in a queue. This is useful when we perform linearization for codegen.
+;; 3.
+(define* (closure-conversion cps #:optional (env *top-level*))
   (match cps
     (($ lambda/k ($ cps _ kont name karg) args body)
-     (let ((env (apply new-env args)))
-       (bind-el! env el)
-       (make-closure/k kont name karg env (closure-conversion body env))))
+     (let ((nenv (new-env args))
+           (frees (alive-frees env cps)))
+       (add-frees! nenv frees)
+       (make-closure/k kont name karg nenv
+                       (closure-conversion body nenv))))
     (($ branch/k ($ cps _ kont name karg) cnd b1 b2)
      (make-branch/k kont name karg
-                    (closure-conversion cnd el)
-                    (closure-conversion b1 el)
-                    (closure-conversion b2 el)))
+                    (closure-conversion cnd env)
+                    (closure-conversion b1 env)
+                    (closure-conversion b2 env)))
     (($ collection/k ($ cps _ kont name karg) var type size value body)
      (make-collection/k kont name karg var type size value
-                        (closure-conversion body el)))
+                        (closure-conversion body env)))
     (($ seq/k ($ cps _ kont name karg) exprs)
-     (make-seq/k kont name karg (map (lambda (e) (closure-conversion e el)) exprs)))
+     (make-seq/k kont name karg (map (lambda (e) (closure-conversion e env)) exprs)))
     (($ letfun/k ($ bind-special-form/k ($ cps _ kont name karg) fname fun body))
      (make-letfun/k kont name karg kname
-                    (closure-conversion fun el)
-                    (closure-conversion body el)))
+                    (closure-conversion fun env)
+                    (closure-conversion body env)))
     (($ letcont/k ($ bind-special-form/k ($ cps _ kont name karg) jname jcont body))
      (make-letcont/k kont name karg jname
-                     (closure-conversion jcont el)
-                     (closure-conversion body el)))
+                     (closure-conversion jcont env)
+                     (closure-conversion body env)))
     (($ letval/k ($ bind-special-form/k ($ cps _ kont name karg) var value body))
      (make-letval/k kont name karg var
-                    (closure-conversion value el)
-                    (closure-conversion body el)))
+                    (closure-conversion value env)
+                    (closure-conversion body env)))
     (($ app/k ($ cps _ kont name karg) f e)
      (make-app/k kont name karg
-                 (closure-conversion f el)
-                 (closure-conversion e el)))
+                 (closure-conversion f env)
+                 (closure-conversion e env)))
+    ((? id?)
+     (cond
+      ((bindings-index env id) => make-lvar)
+      ((frees-index env id) => make-fvar)
+      (else (throw 'pi-error closure-conversion "Undefined variable `~a'!"))))
     (else cps)))

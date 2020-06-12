@@ -26,6 +26,7 @@
             new-queue
             stack-slots
             queue-slots
+            slot-index
             stack-pop!
             stack-push!
             stack-top
@@ -76,6 +77,10 @@
 (define new-queue make-q)
 (define stack-slots car)
 (define queue-slots car)
+
+(define (slot-index s/q pred)
+  (let ((slots (car s/q)))
+    (any (lambda (x i) (and (pred x) i)) slots (iota slots))))
 
 (define stack-pop! q-pop!)
 (define stack-push! q-push!)

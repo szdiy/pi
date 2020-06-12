@@ -543,6 +543,8 @@
   (match cps
     (($ lambda/k _ args body)
      `(lambda (,@(map cps->expr args)) ,(cps->expr body)))
+    (($ closure/k _ env body)
+     `(lambda (,@(env->args env)) ,body))
     (($ branch/k _ cnd b1 b2)
      `(if ,(cps->expr cnd) ,(cps->expr b1) ,(cps->expr b2)))
     (($ collection/k _ var type size value body)

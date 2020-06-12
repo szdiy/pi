@@ -26,35 +26,41 @@
             top-level-delete!
 
             extend-env
-            binding-ref
-            binding-set!
+            bindings-index
+            frees-index
+            binding-exists?
 
             *top-level*
-            new-env))
+            new-env
+            env->args))
 
-;; FIXME: try some pure, but don't low down perf
+;; NOTE:
+;; 1. Only toplevel is used for storing actual value.
+;; 2. We use closures to manage bindings, the env is defined for conversion.
+;; 3. You can check existance in env, not referring the value from it.
+
 (define-record-type env
   (fields
    (mutable prev)
-   (mutable bindings)))
+   (mutable bindings)
+   (mutable frees)))
 
-(define (new-env . params)
-  (let ((bindings (make-hash-table)))
-    (for-each
-     (lambda (v)
-       ;; NOTE: since each registered param will be guarrented to set a value,
-       ;;       so it's fine we set a special sign 'registered here for debug.
-       (hash-set! bindings v 'registered))
-     params)
-    (make-env #f bindings)))
+(define-record-type toplevel (parent env) (fields bindings))
+(define (new-toplevel)
+  (make-toplevel #f #f #f (make-hash-table)))
 
-(define *top-level* (new-env))
+(define (new-env params)
+  (let ((bindings (list->queue params))
+        (frees (new-queue)))
+    (make-env #f bindings frees)))
+
+(define *top-level* (new-toplevel))
 
 (define (top-level-ref k)
-  (hash-ref (env-bindings *top-level*) k))
+  (hash-ref (toplevel-bindings *top-level*) k))
 
 (define (top-level-set! k v)
-  (hash-set! (env-bindings *top-level*) k v))
+  (hash-set! (toplevel-bindings *top-level*) k v))
 
 (define (top-level-delete! k v)
   (hash-remove! (env-bindings *top-level*) k))
@@ -62,12 +68,22 @@
 (define (extend-env to new)
   (env-prev-set! to new))
 
-(define (binding-set! env k v)
-  (hash-set! (env-bindings env) k v))
+(define (id-index q id)
+  (slot-index q (lambda (x) (id-eq? x id))))
 
-(define (binding-ref env k)
+(define (bindings-index env k)
+  (slot-index env-bindings k))
+
+(define (frees-index env k)
+  (slot-index (env-frees env) k))
+
+(define (binding-exists? env id)
   (let ((bindings (env-bindings env))
-        (prev (env-prev env)))
-    (or (and bindings (hash-ref bindings k))
-        (and prev (binding-ref prev k))
+        (prev (env-prev env))
+        (pred (lambda (x) (id-eq? x id))))
+    (or (and bindings (slot-index bindings id))
+        (and prev (binding-exists? prev id))
         (top-level-ref k))))
+
+(define (env->args env)
+  (hash-map->list (lambda (k _) k) (env-bindings env)))
