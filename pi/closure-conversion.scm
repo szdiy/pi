@@ -41,15 +41,14 @@
 ;; NOTE:
 ;; 1. We only perform CC after DCE, so there's no unused binding.
 ;; 2. We distinct local bindings and free vars. Both of them are ordered in a queue. This is useful when we perform linearization for codegen.
-;; 3.
-(define* (closure-conversion cps #:optional (env *top-level*))
+;; 3. We use flat-closure design, which put all free variables with values in a single record of the function. This can save some RAMs for embedded system.
+(define* (closure-conversion cps #:optional (env (new-env)))
   (match cps
     (($ lambda/k ($ cps _ kont name karg) args body)
-     (let ((nenv (new-env args))
-           (frees (alive-frees env cps)))
-       (add-frees! nenv frees)
+     (let ((frees (alive-frees env cps)))
+       (add-frees! env frees)
        (make-closure/k kont name karg nenv
-                       (closure-conversion body nenv))))
+                       (closure-conversion body env))))
     (($ branch/k ($ cps _ kont name karg) cnd b1 b2)
      (make-branch/k kont name karg
                     (closure-conversion cnd env)

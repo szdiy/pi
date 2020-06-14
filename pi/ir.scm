@@ -14,7 +14,7 @@
 ;;  You should have received a copy of the GNU General Public License
 ;;  along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-(define-module (pi ir)
+(define-module (pi lir)
   #:use-module (pi utils)
   #:use-module ((rnrs) #:select (define-record-type))
   #:export (make-insr
@@ -31,7 +31,7 @@
 
             make-ctx ctx-code ctx-env ctx-upper))
 
-;; instruction (insr) is a simple IR
+;; instruction (insr) is a simple low-level IR
 ;; TODO: we may need more IRs for better optimizing
 (define-record-type insr (fields subx))
 
@@ -43,6 +43,8 @@
 (define-record-type insr-app (parent insr))              ; application
 (define-record-type insr-closure (parent insr) (fields par))  ; closure
 (define-record-type insr-seq (parent insr))              ; sequence
+(define-record-type insr-lvar (parent insr) num)         ; local variable
+(define-record-type insr-fvar (parent insr) num)         ; free variable
 
 ;; for context
 (define-record-type ctx
