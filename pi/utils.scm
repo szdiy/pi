@@ -51,7 +51,8 @@
             collection?
             atom?
             args-with-keys
-            get-all-defs))
+            get-all-defs
+            new-counter))
 
 (define (newsym sym) (gensym (symbol->string sym)))
 
@@ -176,3 +177,11 @@
            (throw 'pi-error 'get-all-defs
                   "No expressions in body in form `~a'" exprs)
            (values (cdr e) (reverse ret)))))))
+
+;; NOTE: Set step to 0 will get the current cnt
+(define* (new-counter #:optional (init 0))
+  (let ((cnt init))
+    (lambda* (#:optional (step 1))
+      (cond
+       ((integer? step) (set! cnt (+ cnt step)) cnt)
+       (else (throw 'pi-error new-counter "Invalid step: `~a`!" step))))))

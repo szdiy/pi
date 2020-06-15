@@ -24,6 +24,7 @@
             top-level-ref
             top-level-set!
             top-level-delete!
+            top-level-for-each
 
             extend-env
             bindings-index
@@ -64,6 +65,9 @@
 
 (define (top-level-delete! k v)
   (hash-remove! (env-bindings *top-level*) k))
+
+(define (top-level-for-each proc)
+  (hash-for-each proc (toplevel-bindings *top-level*)))
 
 (define (extend-env to new)
   (env-prev-set! to new))

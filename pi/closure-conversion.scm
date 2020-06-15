@@ -36,12 +36,20 @@
             (if (env-exists? env x)
                 (cons x p)
                 p))
-          '() (queue-slot (env-frees env)))))
+          '() outter-frees)))
 
 ;; NOTE:
 ;; 1. We only perform CC after DCE, so there's no unused binding.
-;; 2. We distinct local bindings and free vars. Both of them are ordered in a queue. This is useful when we perform linearization for codegen.
-;; 3. We use flat-closure design, which put all free variables with values in a single record of the function. This can save some RAMs for embedded system.
+;; 2. We distinct local bindings and free vars. Both of them are ordered in a
+;;    queue. This is useful when we perform linearization for codegen.
+;; 3. We use flat-closure design, which put all free variables with values in
+;;    a single record of the function. This can save some RAMs for embedded
+;;    system.
+;; 4. According to Appel's book, we must perform heap-exhausted test. However,
+;;    we leave this duty to the VM when it calls procedure each time. This may
+;;    save some RAMs.
+;; 5. CPS has no explicit loops, this may cause redundant heap-exhausted test.
+;;    We may do specific optimizings for tail call in the future.
 (define* (closure-conversion cps #:optional (env (new-env)))
   (match cps
     (($ lambda/k ($ cps _ kont name karg) args body)
@@ -58,7 +66,8 @@
      (make-collection/k kont name karg var type size value
                         (closure-conversion body env)))
     (($ seq/k ($ cps _ kont name karg) exprs)
-     (make-seq/k kont name karg (map (lambda (e) (closure-conversion e env)) exprs)))
+     (make-seq/k kont name karg
+                 (map (lambda (e) (closure-conversion e env)) exprs)))
     (($ letfun/k ($ bind-special-form/k ($ cps _ kont name karg) fname fun body))
      (make-letfun/k kont name karg kname
                     (closure-conversion fun env)

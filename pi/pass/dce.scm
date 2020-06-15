@@ -73,5 +73,5 @@
 (define-pass dead-function-elimination cps
   (let ((funcs (hash-map->list (lambda (v _) v) *top-level*))
         (fv (free-vars cps)))
-    (map top-level-delete! (diff funcs fv))
+    (for-each top-level-delete! (diff funcs fv))
     cps))

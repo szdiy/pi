@@ -43,7 +43,15 @@
             id-orig
             new-id
             id-eq?
-            id-list?))
+            id-list?
+
+            lvar lvar?
+            make-lvar
+            lvar-offset
+
+            fvar fvar?
+            make-fvar
+            lvar-offset))
 
 (define-record-type constant (fields val type))
 
@@ -141,3 +149,13 @@
 
 (define (id-list? lst)
   (make-object-list-pred lst id?))
+
+;; local variable
+(define-typed-record lvar
+  (fields
+   (offset positve?)))
+
+;; free variable
+(define-typed-record fvar
+  (fields
+   (offset positive?)))

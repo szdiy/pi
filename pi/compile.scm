@@ -26,14 +26,17 @@
      (else (lp (cons (read port) ret))))))
 
 (define (optimize cps)
-  (run-pass
-   cps
-   function-inline
-   dead-function-elimination
-   fold-constant
-   delta-reduction
-   fold-branch
-   dead-variable-elimination))
+  (define (do-optmize cps)
+    (run-pass
+     cps
+     function-inline
+     dead-function-elimination
+     fold-constant
+     delta-reduction
+     fold-branch
+     dead-variable-elimination))
+  (top-level-for-each do-optimize)
+  (do-optimize cps))
 
 (define (compile filename)
   (when (not (file-exists? filename))
