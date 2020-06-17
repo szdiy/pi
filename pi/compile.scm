@@ -29,6 +29,7 @@
   (define (do-optmize cps)
     (run-pass
      cps
+     normalize
      function-inline
      dead-function-elimination
      fold-constant

@@ -28,17 +28,17 @@
             cps cps?
             cps-kont cps-kont-set!
             cps-name cps-name-set!
-            cps-karg cps-karg-set!
+            cps-attr cps-attr-set!
 
             lambda/k lambda/k?
             lambda/k-args lambda/k-args-set!
             lambda/k-body lambda/k-body-set!
-            new-lambda/k
+            make-lambda/k new-lambda/k
 
             closure/k closure/k?
             closure/k-env closure/k-env-set!
             closure/k-body closure/k-body-set!
-            new-closure/k
+            make-closure/k new-closure/k
 
             bind-special-form/k bind-special-form/k?
             bind-special-form/k-var bind-special-form/k-var-set!
@@ -46,35 +46,35 @@
             bind-special-form/k-body bind-special-form/k-body-set!
 
             letval/k letval/k?
-            new-letval/k
+            make-letval/k new-letval/k
 
             letfun/k letfun/k?
-            new-letfun/k
+            make-letfun/k new-letfun/k
 
             letcont/k letcont/k?
-            new-letcont/k
+            make-letcont/k new-letcont/k
 
             branch/k branch/k?
             branch/k-cnd branch/k-cnd-set!
             branch/k-tbranch branch/k-tbranch-set!
             branch/k-fbranch branch/k-fbranch-set!
-            new-branch/k
+            make-branch/k new-branch/k
 
             collection/k collection/k?
             collection/k-var collection/k-var-set!
             collection/k-type collection/k-type-set!
             collection/k-size collection/k-size-set!
             collection/k-value collection/k-value-set!
-            new-collection/k
+            make-collection/k new-collection/k
 
             seq/k seq/k?
             seq/k-exprs seq/k-exprs-set!
-            new-seq/k
+            make-seq/k new-seq/k
 
             app/k app/k?
             app/k-func app/k-func-set!
             app/k-args app/k-args-set!
-            new-app/k
+            make-app/k new-app/k
 
             cont-apply
             lambda-desugar
@@ -84,12 +84,6 @@
             make-ref-table
 
             alpha-renaming
-            beta-reduction
-            beta-reduction/preserving
-            eta-reduction
-
-            normalize
-            normalize/preserving
 
             ast->cps
             cps->expr
@@ -99,15 +93,14 @@
 
 ;; According to <<Compiling with continuations, continued>> - Andrew Kennedy
 ;; The principle to design CPS IR:
-;; 1. All intermediate results are named, that is to say, we use a special binding to hold
-;;    the intermediate result.
+;; 1. All intermediate results are named, that is to say, we use a special binding
+;;    to hold the intermediate result.
 ;; 2. There're 2 kinds of application:
-;;    a. Translation-time application, which will not be reduced to normal-form in the
-;;       translation.
+;;    a. Translation-time application, which will not be reduced to normal-form in
+;;       the translation.
 ;;    b.
-;; 3. One-pass CPS translation, which introduce no 'administrative-reduction' that must be
-;;    removed in a seperated phase.
-;;
+;; 3. One-pass CPS translation, which introduce no 'administrative-reduction' that
+;;    must be removed in a seperated phase.
 
 (define (valid-expr? x)
   (or (cps? x)
@@ -126,24 +119,23 @@
    ;; TODO: capture the current continuation
    (kont (lambda (x) (or (id? x) (primitive? x) (cps? x))))
    (name id?) ; the unique name of the continuation
-   ;; The result of the current expr will be bound to karg, and be passed to kont
-   (karg id?))) ; the arg bound to the continuation
+   (attr list?))) ; attributes of the continuation
 
 (define-typed-record lambda/k (parent cps)
   (fields
    (args id-list?)
    (body valid-expr?)))
 (define* (new-lambda/k args body #:key (kont prim:halt) (name (new-id "kont-"))
-                       (karg (new-id "karg-")))
-  (make-lambda/k (list kont name karg) args body))
+                       (attr '()))
+  (make-lambda/k (list kont name attr) args body))
 
 (define-typed-record closure/k (parent cps)
   (fields
    (env id-list?)
    (body valid-expr?)))
 (define* (new-closure/k args body #:key (kont prim:halt) (name (new-id "kont-"))
-                        (karg (new-id "karg-")))
-  (make-lambda/k (list kont name karg) env body))
+                        (attr '()))
+  (make-lambda/k (list kont name attr) env body))
 
 (define-typed-record bind-special-form/k (parent cps)
   (fields
@@ -154,20 +146,20 @@
 (define-typed-record letval/k (parent bind-special-form/k))
 (define* (new-letval/k var value body #:key (kont prim:halt)
                        (name (new-id "kont-"))
-                       (karg (new-id "karg-")))
-  (make-letval/k (list kont name karg) var value body))
+                       (attr '()))
+  (make-letval/k (list kont name attr) var value body))
 
 (define-typed-record letfun/k (parent bind-special-form/k))
 (define* (new-letfun/k var value body #:key (kont prim:halt)
                        (name (new-id "kont-"))
-                       (karg (new-id "karg-")))
-  (make-letfun/k (list kont name karg) var value body))
+                       (attr '()))
+  (make-letfun/k (list kont name attr) var value body))
 
 (define-typed-record letcont/k (parent bind-special-form/k))
 (define* (new-letcont/k var value body #:key (kont prim:halt)
                         (name (new-id "kont-"))
-                        (karg (new-id "karg-")))
-  (make-letcont/k (list kont name karg) var value body))
+                        (attr '()))
+  (make-letcont/k (list kont name attr) var value body))
 
 (define-typed-record branch/k (parent cps)
   (fields
@@ -176,8 +168,8 @@
    (fbranch letcont/k?)))
 (define* (new-branch/k cnd b1 b2 #:key (kont prim:halt)
                        (name (new-id "kont-"))
-                       (karg (new-id "karg-")))
-  (make-branch/k (list kont name karg) cnd b1 b2))
+                       (attr '()))
+  (make-branch/k (list kont name attr) cnd b1 b2))
 
 (define-typed-record collection/k (parent cps)
   (fields
@@ -188,16 +180,16 @@
 (define* (new-collection/k cname type size value body
                            #:key (kont prim:halt)
                            (name (new-id "kont-"))
-                           (karg (new-id "karg-")))
-  (make-collection/k (list kont name karg) cname type size value body))
+                           (attr '()))
+  (make-collection/k (list kont name attr) cname type size value body))
 
 (define-typed-record seq/k (parent cps)
   (fields
    (exprs expr-list?)))
 (define* (new-seq/k exprs #:key (kont prim:halt)
                     (name (new-id "kont-"))
-                    (karg (new-id "karg-")))
-  (make-seq/k (list kont name karg) exprs))
+                    (attr '()))
+  (make-seq/k (list kont name attr) exprs))
 
 (define (applicable? x)
   (or (letfun/k? x) (primitive? x) (lambda/k? x) (closure/k? x)
@@ -215,8 +207,8 @@
    (args any?)))
 (define* (new-app/k f args #:key (kont prim:halt)
                     (name (new-id "kont-"))
-                    (karg (new-id "karg-")))
-  (make-app/k (list kont name karg)
+                    (attr '()))
+  (make-app/k (list kont name attr)
               f (if (list? args) args (list args))))
 
 (define (cont-apply f e)
@@ -225,12 +217,11 @@
 (define (lambda-desugar cps)
   (match cps
     ((? bind-special-form/k? bsf)
-     (make-lambda/k (list (cps-kont bsf) (cps-name bsf) (cps-karg bsf))
+     (make-lambda/k (list (cps-kont bsf) (cps-name bsf) (cps-attr bsf))
                     (list (bind-special-form/k-var bsf))
                     (bind-special-form/k-value bsf)))
     (else cps)))
 
-;; FIXME: Should we count karg?
 (define (vars-fold rec acc op cps)
   (let ((expr (lambda-desugar cps)))
     (match expr
@@ -260,8 +251,24 @@
 (define (insec . args) (apply lset-intersection id-eq? args))
 (define (sym-insec . args) (apply lset-intersection eq? args))
 
-(define (free-vars cps) (vars-fold free-vars union diff cps))
-(define (names cps) (vars-fold names union union cps))
+(define* (free-vars cps #:optional (refresh? #f))
+  (cond
+   ((and (not refresh?) (assoc-ref (cps-attr cps) 'free-vars)) => identity)
+   (else
+    (let ((fv (vars-fold free-vars union diff cps))
+          (attr (cps-attr cps)))
+      (set! attr (cons (cons 'free-vars fv) attr))
+      fv))))
+
+(define* (names cps #:optional (refresh? #f))
+  (cond
+   ((and (not refresh?) (assoc-ref (cps-attr cps) 'var-names)) => identity)
+   (else
+    (let ((nv (vars-fold names union union cps))
+          (attr (cps-attr cps)))
+      (set! attr (cons (cons 'var-names nv) attr))
+      nv))))
+
 ;; NOTE: free-vars <= names, so diff is enough
 (define (bound-vars cps) (apply diff (names cps) (free-vars cps)))
 (define (all-ref-vars cps) (vars-fold all-ref-vars append append cps))
@@ -281,34 +288,6 @@
                 (hash-set! ht v (1+ (hash-ref ht v 0))))
               vl)
     ht))
-
-;; capture free substitute
-(define (cfs expr args el)
-  (define (substitute e)
-    (cond
-     ((list-index (lambda (x) (eq? x e)) args)
-      => (lambda (i) (list-ref el i)))
-     (else e)))
-  (when (not (= (length args) (length el)))
-    (throw 'pi-error cfs
-           (format #f "BUG: expr: ~a, args: ~a, el: ~a~%" expr args el)))
-  (match expr
-    (($ lambda/k ($ cps _ kont name karg) fargs body)
-     ;;(format #t "cfs 0 ~a~%" expr)
-     (lambda/k-body-set! expr (cfs body args el))
-     expr)
-    (($ app/k ($ cps _ kont name karg) f e)
-     ;;(format #t "cfs 1 ~a~%" expr)
-     (app/k-func-set! expr (cfs f args el))
-     (app/k-args-set! expr (cfs e args el))
-     expr)
-    (($ seq/k ($ cps _ kont name karg) exprs)
-     ;;(format #t "cfs 2 ~a~%" expr)
-     (seq/k-exprs-set! expr (map (lambda (ee) (cfs ee args el)) exprs))
-     expr)
-    (else
-     ;;(format #t "cfs 4 ~a~%" expr)
-     (substitute expr))))
 
 ;; cps -> symbol-list -> id-list
 (define (alpha-renaming expr old new)
@@ -342,86 +321,14 @@
     ((? symbol?) (rename expr))
     (else expr)))
 
-(define (beta-reduction expr)
-  (match expr
-    (($ app/k _ ($ lambda/k _ params body) args)
-     ;;(display "beta 0\n")
-     (beta-reduction
-      (cfs (beta-reduction body)
-           params
-           (beta-reduction args))))
-    (($ lambda/k _ args body)
-     ;;(display "beta 2\n")
-     (lambda/k-body-set! expr (beta-reduction body))
-     expr)
-    (($ branch/k _ cnd b1 b2)
-     (branch/k-cnd-set! expr (beta-reduction cnd))
-     (branch/k-tbranch-set! expr (beta-reduction b1))
-     (branch/k-fbranch-set! expr (beta-reduction b2))
-     expr)
-    (($ seq/k _ e)
-     (seq/k-exprs-set! expr (map beta-reduction e))
-     expr)
-    ((? bind-special-form/k? bsf)
-     (beta-reduction
-      (new-app/k (make-lambda/k (list (cps-kont bsf) (cps-name bsf) (cps-karg bsf))
-                                (list (bind-special-form/k-var bsf))
-                                (bind-special-form/k-body bsf))
-                 (beta-reduction (bind-special-form/k-value bsf)))))
-    (else expr)))
-
-(define (beta-reduction/preserving expr)
-  (match expr
-    (($ app/k _ ($ lambda/k _ params body) args)
-     ;;(display "beta 0\n")
-     (beta-reduction/preserving
-      (cfs (beta-reduction/preserving body)
-           params
-           (beta-reduction/preserving args))))
-    (($ lambda/k _ args body)
-     ;;(display "beta 2\n")
-     (lambda/k-body-set! expr (beta-reduction/preserving body))
-     expr)
-    (($ branch/k _ cnd b1 b2)
-     (branch/k-cnd-set! expr (beta-reduction/preserving cnd))
-     (branch/k-tbranch-set! expr (beta-reduction/preserving b1))
-     (branch/k-fbranch-set! expr (beta-reduction/preserving b2))
-     expr)
-    (($ seq/k _ e)
-     (seq/k-exprs-set! expr (map beta-reduction/preserving e))
-     expr)
-    (else expr)))
-
-(define (eta-reduction expr)
-  (match expr
-    (($ lambda/k _ arg ($ app/k _ f (? (lambda (a) (id-eq? a arg)))))
-     ;;(display "eta-0\n")
-     (eta-reduction f))
-    (($ seq/k ($ cps _ kont name karg) exprs)
-     ;;(display "eta-1\n")
-     (make-seq/k (list kont name karg) (map eta-reduction exprs)))
-    (else expr)))
-
-(define (normalize expr)
-  (fold (lambda (f p) (f p))
-        expr
-        (list beta-reduction
-              eta-reduction)))
-
-(define (normalize/preserving expr)
-  (fold (lambda (f p) (f p))
-        expr
-        (list beta-reduction/preserving
-              eta-reduction)))
-
 (define (comp-cps expr cont)
   (match expr
     (($ closure ($ ast _ body) params _ _)
      (let* ((fname (new-id "func-"))
-            (fk (new-id "karg-"))
+            (fk (new-id "kont-"))
             (nv (map new-id params))
             (fun (alpha-renaming (new-lambda/k params (ast->cps body fk)
-                                               #:karg fk #:kont cont)
+                                               #:name fk #:kont cont)
                                  params nv)))
        (new-letfun/k fname fun (new-app/k cont fname #:kont cont) #:kont cont)))
     (($ binding ($ ast _ body) var val)
@@ -437,7 +344,7 @@
     (($ branch ($ ast _ (cnd b1 b2)))
      (let* ((arg (new-id))
             (jname (new-id "jcont-"))
-            (kname (new-id "karg-"))
+            (kname (new-id "kont-"))
             (k1 (new-id "letcont/k-"))
             (k2 (new-id "letcont/k-"))
             (kont2 (new-letcont/k k2 (new-lambda/k '() (ast->cps b2 jname)
@@ -462,10 +369,10 @@
     ;; FIXME: distinct value and function for the convenient of fun-inline.
     (($ closure ($ ast _ body) params _ _)
      (let* ((fname (new-id "func-"))
-            (fk (new-id "karg-"))
+            (fk (new-id "kont-"))
             (nv (map new-id params))
             (fun (alpha-renaming
-                  (new-lambda/k nv (ast->cps body fk) #:karg fk)
+                  (new-lambda/k nv (ast->cps body fk) #:name fk)
                   params nv)))
        (new-letfun/k fname fun (new-app/k cont fname) #:kont cont)))
     (($ def ($ ast _ body) var)
@@ -486,7 +393,7 @@
     (($ branch ($ ast _ (cnd b1 b2)))
      (let* ((arg (new-id))
             (jname (new-id "jcont-"))
-            (kname (new-id "karg-"))
+            (kname (new-id "kont-"))
             (k1 (new-id "letcont/k-"))
             (k2 (new-id "letcont/k-"))
             (kont2 (new-letcont/k k2 (new-lambda/k '() (ast->cps b2 jname))
@@ -536,8 +443,6 @@
     ;; set!
     ;; collection-set! collection-ref
     (else (throw 'pi-error 'ast->cps "Wrong expr: " expr))))
-
-;; FIXME: Move all karg to cps, not in args.
 
 (define* (cps->expr cps #:optional (hide-begin? #t))
   (match cps

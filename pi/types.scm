@@ -153,7 +153,7 @@
 ;; local variable
 (define-typed-record lvar
   (fields
-   (offset positve?)))
+   (offset positive?)))
 
 ;; free variable
 (define-typed-record fvar

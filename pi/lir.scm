@@ -77,6 +77,11 @@
   (fields
    (value integer?)))
 
+;; Pop ss[offset] to TOS
+(define-typed-record insr-local (parent insr)
+  (fields
+   (offset integer?)))
+
 ;; jump if TOS is false
 (define-typed-record insr-fjump (parent insr))
 
@@ -91,11 +96,6 @@
   (fields
    (env env?)
    (code insr?)))
-
-;; sequence
-(define-typed-record insr-seq (parent insr)
-  (fields
-   (exprs insr-list?)))
 
 (define (cps->lir cps)
   (($ closure/k ($ cps _ kont name karg) env body)
@@ -123,4 +123,8 @@
    )
   (($ app/k ($ cps _ kont name karg) f e)
    )
+  (($ lvar _ offset)
+   )
+  (($ fvar _ offset)
+   ())
   (else (throw 'pi-error cps->lir "Invalid cps `~a'!" cps)))

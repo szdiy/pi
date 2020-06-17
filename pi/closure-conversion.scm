@@ -38,6 +38,9 @@
                 p))
           '() outter-frees)))
 
+(define (get-fvar-base env)
+  (length (queue-length (env-bindings env))))
+
 ;; NOTE:
 ;; 1. We only perform CC after DCE, so there's no unused binding.
 ;; 2. We distinct local bindings and free vars. Both of them are ordered in a
@@ -50,38 +53,40 @@
 ;;    save some RAMs.
 ;; 5. CPS has no explicit loops, this may cause redundant heap-exhausted test.
 ;;    We may do specific optimizings for tail call in the future.
+;; 6. Different from the passes, we use CPS constructor here for taking advantage of
+;;    type checking in record type.
 (define* (closure-conversion cps #:optional (env (new-env)))
   (match cps
-    (($ lambda/k ($ cps _ kont name karg) args body)
+    (($ lambda/k ($ cps _ kont name attr) args body)
      (let ((frees (alive-frees env cps)))
        (add-frees! env frees)
-       (make-closure/k kont name karg nenv
+       (make-closure/k kont name attr nenv
                        (closure-conversion body env))))
-    (($ branch/k ($ cps _ kont name karg) cnd b1 b2)
-     (make-branch/k kont name karg
+    (($ branch/k ($ cps _ kont name attr) cnd b1 b2)
+     (make-branch/k kont name attr
                     (closure-conversion cnd env)
                     (closure-conversion b1 env)
                     (closure-conversion b2 env)))
-    (($ collection/k ($ cps _ kont name karg) var type size value body)
-     (make-collection/k kont name karg var type size value
+    (($ collection/k ($ cps _ kont name attr) var type size value body)
+     (make-collection/k kont name attr var type size value
                         (closure-conversion body env)))
-    (($ seq/k ($ cps _ kont name karg) exprs)
-     (make-seq/k kont name karg
+    (($ seq/k ($ cps _ kont name attr) exprs)
+     (make-seq/k kont name attr
                  (map (lambda (e) (closure-conversion e env)) exprs)))
-    (($ letfun/k ($ bind-special-form/k ($ cps _ kont name karg) fname fun body))
-     (make-letfun/k kont name karg kname
+    (($ letfun/k ($ bind-special-form/k ($ cps _ kont name attr) fname fun body))
+     (make-letfun/k kont name attr kname
                     (closure-conversion fun env)
                     (closure-conversion body env)))
-    (($ letcont/k ($ bind-special-form/k ($ cps _ kont name karg) jname jcont body))
-     (make-letcont/k kont name karg jname
+    (($ letcont/k ($ bind-special-form/k ($ cps _ kont name attr) jname jcont body))
+     (make-letcont/k kont name attr jname
                      (closure-conversion jcont env)
                      (closure-conversion body env)))
-    (($ letval/k ($ bind-special-form/k ($ cps _ kont name karg) var value body))
-     (make-letval/k kont name karg var
+    (($ letval/k ($ bind-special-form/k ($ cps _ kont name attr) var value body))
+     (make-letval/k kont name attr var
                     (closure-conversion value env)
                     (closure-conversion body env)))
-    (($ app/k ($ cps _ kont name karg) f e)
-     (make-app/k kont name karg
+    (($ app/k ($ cps _ kont name attr) f e)
+     (make-app/k kont name attr
                  (closure-conversion f env)
                  (closure-conversion e env)))
     ((? id?)

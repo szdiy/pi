@@ -14,6 +14,7 @@
 ;;  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (pi env)
+  #:use-module (pi utils)
   #:use-module (pi ast)
   #:use-module (pi types)
   #:use-module ((rnrs) #:select (define-record-type))
@@ -87,7 +88,7 @@
         (pred (lambda (x) (id-eq? x id))))
     (or (and bindings (slot-index bindings id))
         (and prev (binding-exists? prev id))
-        (top-level-ref k))))
+        (top-level-ref id))))
 
 (define (env->args env)
   (hash-map->list (lambda (k _) k) (env-bindings env)))
