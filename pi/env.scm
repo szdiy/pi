@@ -43,7 +43,7 @@
 
 (define-record-type env
   (fields
-   (mutable prev)
+   (mutable prev) ; prev should be a CPS
    (mutable bindings)
    (mutable frees)))
 

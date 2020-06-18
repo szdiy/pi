@@ -19,6 +19,10 @@
   #:use-module (pi pass)
   #:use-module (ice-9 match))
 
+;; FIXME: We have to tweak fold-const when we have side-effect analysis.
+;; TODO: For now, we haven't supported assignment yet. If we have it, then the
+;;       modified variable has to change its fold value, or even can't be folded
+
 ;; 1. (if 1 2 3) -k-> (if 1 2 3)
 ;; 2. (if 1 2 (+ 3 4)) -k-> (letcont ((k (halt (+ 4 3)))) (if 1 2 k))
 (define (fc cps)
@@ -34,6 +38,14 @@
      (bind-special-form/k-value-set! sf (fc (bind-special-form/k-value sf)))
      (bind-special-form/k-body-set! sf (fc (bind-special-form/k-body sf)))
      sf)
+    (($ seq/k _ exprs)
+     (seq/k-exprs-set! cps (map fc exprs))
+     cps)
+    (($ branch/k _ cnd b1 b2)
+     (branch/k-cnd-set! cps (fc cnd))
+     (branch/k-tbranch-set! cps (fc b1))
+     (branch/k-fbranch-set! cps (fc b2))
+     cps)
     (else cps)))
 
 (define-pass fold-constant cps (fc cps))

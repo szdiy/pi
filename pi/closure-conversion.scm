@@ -68,6 +68,8 @@
 (define* (closure-conversion cps)
   (match cps
     (($ lambda/k ($ cps _ kont name attr) args body)
+     (closure-set! name (queue-slot (env-bindings (current-env))))
+     ()
      ;; TODO:
      ;; 1. recording the current bindings by the label to lookup table
      ;; 2. replacing all the appeared free variable to `fvar' by label and order num

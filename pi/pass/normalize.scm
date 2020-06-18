@@ -21,6 +21,9 @@
   #:use-module (ice-9 match)
   #:use-module (srfi srfi-1))
 
+;; NOTE: Only normal-order language uses normalize pass,
+;;       the applicative-order language like Scheme won't use it.
+;;
 ;; NOTE: Please notice that the normalize pass is actually normalize/preserving,
 ;;       since it only substitutes the regular let bindings, and preserving
 ;;       letval/letcont/letfun...etc, which are useful for CPS optimizing.
