@@ -22,7 +22,14 @@
   #:use-module (ice-9 match)
   #:use-module ((srfi srfi-1) #:select (fold))
   #:use-module ((rnrs) #:select (define-record-type))
-  #:export (closure-conversion))
+  #:export (closure-conversion
+            closure-ref))
+
+(define *closure-lookup-table* (make-hash-table))
+(define (closure-set! label bindings)
+  (hash-set! *closure-lookup-table* label bindings))
+(define (closure-ref label)
+  (hash-ref *closure-lookup-table* label))
 
 ;; Add free vars
 (define (add-frees! env frees)
@@ -41,6 +48,9 @@
 (define (get-fvar-base env)
   (length (queue-length (env-bindings env))))
 
+(define current-env (make-parameter (new-env)))
+(define current-kont (make-parameter prim:halt))
+
 ;; NOTE:
 ;; 1. We only perform CC after DCE, so there's no unused binding.
 ;; 2. We distinct local bindings and free vars. Both of them are ordered in a
@@ -55,40 +65,46 @@
 ;;    We may do specific optimizings for tail call in the future.
 ;; 6. Different from the passes, we use CPS constructor here for taking advantage of
 ;;    type checking in record type.
-(define* (closure-conversion cps #:optional (env (new-env)))
+(define* (closure-conversion cps)
   (match cps
     (($ lambda/k ($ cps _ kont name attr) args body)
-     (let ((frees (alive-frees env cps)))
-       (add-frees! env frees)
-       (make-closure/k kont name attr nenv
-                       (closure-conversion body env))))
+     ;; TODO:
+     ;; 1. recording the current bindings by the label to lookup table
+     ;; 2. replacing all the appeared free variable to `fvar' by label and order num
+     ;; 3. counting frame size for each closure env in lir
+     )
+    #;
+    (($ closure/k ($ cps _ kont name attr) env body)
+    ;; TODO: The escaping function will be converted to closure/k.
+    ;;       This may need escaping analysis or liveness analysis.
+    )
     (($ branch/k ($ cps _ kont name attr) cnd b1 b2)
      (make-branch/k kont name attr
-                    (closure-conversion cnd env)
-                    (closure-conversion b1 env)
-                    (closure-conversion b2 env)))
+                    (closure-conversion cnd)
+                    (closure-conversion b1)
+                    (closure-conversion b2)))
     (($ collection/k ($ cps _ kont name attr) var type size value body)
      (make-collection/k kont name attr var type size value
-                        (closure-conversion body env)))
+                        (closure-conversion body)))
     (($ seq/k ($ cps _ kont name attr) exprs)
      (make-seq/k kont name attr
-                 (map (lambda (e) (closure-conversion e env)) exprs)))
+                 (map (lambda (e) (closure-conversion e)) exprs)))
     (($ letfun/k ($ bind-special-form/k ($ cps _ kont name attr) fname fun body))
      (make-letfun/k kont name attr kname
-                    (closure-conversion fun env)
-                    (closure-conversion body env)))
+                    (closure-conversion fun)
+                    (closure-conversion body)))
     (($ letcont/k ($ bind-special-form/k ($ cps _ kont name attr) jname jcont body))
      (make-letcont/k kont name attr jname
-                     (closure-conversion jcont env)
-                     (closure-conversion body env)))
+                     (closure-conversion jcont)
+                     (closure-conversion body)))
     (($ letval/k ($ bind-special-form/k ($ cps _ kont name attr) var value body))
      (make-letval/k kont name attr var
-                    (closure-conversion value env)
-                    (closure-conversion body env)))
+                    (closure-conversion value)
+                    (closure-conversion body)))
     (($ app/k ($ cps _ kont name attr) f e)
      (make-app/k kont name attr
-                 (closure-conversion f env)
-                 (closure-conversion e env)))
+                 (closure-conversion f)
+                 (closure-conversion e)))
     ((? id?)
      (cond
       ((bindings-index env id) => make-lvar)
