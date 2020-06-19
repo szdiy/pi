@@ -48,7 +48,7 @@
 (define (get-fvar-base env)
   (length (queue-length (env-bindings env))))
 
-(define current-env (make-parameter (new-env)))
+(define current-env (make-parameter *top-level*))
 (define current-kont (make-parameter prim:halt))
 
 ;; NOTE:
@@ -68,8 +68,11 @@
 (define* (closure-conversion cps)
   (match cps
     (($ lambda/k ($ cps _ kont name attr) args body)
-     (closure-set! name (queue-slot (env-bindings (current-env))))
-     ()
+     (let ((nv (new-env args)))
+       (closure-set! name env)
+       (parameterize ((current-env nv)
+                      (current-kont cps))
+         (make-lambda/k kont name attr args (closure-conversion body))))
      ;; TODO:
      ;; 1. recording the current bindings by the label to lookup table
      ;; 2. replacing all the appeared free variable to `fvar' by label and order num
@@ -108,8 +111,12 @@
                  (closure-conversion f)
                  (closure-conversion e)))
     ((? id?)
-     (cond
-      ((bindings-index env id) => make-lvar)
-      ((frees-index env id) => make-fvar)
-      (else (throw 'pi-error closure-conversion "Undefined variable `~a'!"))))
+     (let ((env (current-env))
+           (label (cps-name (current-kont))))
+       (cond
+        ((bindings-index env id) => make-lvar)
+        ((frees-index env id)
+         => (lambda (index)
+              (make-fvar label index)))
+        (else (throw 'pi-error closure-conversion "Undefined variable `~a'!")))))
     (else cps)))

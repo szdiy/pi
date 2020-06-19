@@ -43,13 +43,13 @@
 
 (define-record-type env
   (fields
-   (mutable prev) ; prev should be a CPS
+   (mutable prev)
    (mutable bindings)
    (mutable frees)))
 
 (define-record-type toplevel (parent env) (fields bindings))
 (define (new-toplevel)
-  (make-toplevel #f #f #f (make-hash-table)))
+  (make-toplevel #f #f (make-hash-table)))
 
 (define (new-env params)
   (let ((bindings (list->queue params))
