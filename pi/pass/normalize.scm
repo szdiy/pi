@@ -21,6 +21,9 @@
   #:use-module (ice-9 match)
   #:use-module (srfi srfi-1))
 
+;; NOTE: After normalize, there's no ((lambda ...) args), all the applications will
+;;       be (id args). This is useful in codegen.
+;;
 ;; NOTE: We can even perform normalization for applicative-order language like
 ;;       Scheme after CPS transformation, since the result of all the expressions
 ;;       had been bounded by the continuation, which guarantees applicative-order.
@@ -39,7 +42,7 @@
 ;;          (letval ((z 1))
 ;;            (j (+ y z)))))
 ;;       Please notice that K is the variable which bounds the result of (+ 1 2),
-;;       after CPS transformation, it's (+ y z), and it was applied in two places
+;;       after CPS transformation it's (+ y z), and it was applied in two places
 ;;       that K appeared. So (+ 1 2) was evaluated just once.
 ;;       If we don't preserve them, then the program was converted to normal-order.
 ;;       ==> (+ (+ 1 2) (+ 1 2))
@@ -129,6 +132,10 @@
     (($ seq/k _ e)
      (seq/k-exprs-set! expr (map beta-reduction/preserving e))
      expr)
+    (($ collection/k _ var type size value body)
+     (collection/k-value-set! expr (beta-reduction/preserving value))
+     (collection/k-body-set expr (beta-reduction/preserving body))
+     expr)
     (else expr)))
 
 (define (eta-reduction expr)
@@ -136,9 +143,19 @@
     (($ lambda/k _ arg ($ app/k _ f (? (lambda (a) (id-eq? a arg)))))
      ;;(display "eta-0\n")
      (eta-reduction f))
+    (($ branch/k _ cnd b1 b2)
+     (branch/k-cnd-set! expr (eta-reduction cnd))
+     (branch/k-tbranch-set! expr (eta-reduction b1))
+     (branch/k-fbranch-set! expr (eta-reduction b2))
+     expr)
     (($ seq/k ($ cps _ kont name attr) exprs)
      ;;(display "eta-1\n")
-     (make-seq/k (list kont name attr) (map eta-reduction exprs)))
+     (seq/k-exprs-set! expr (map eta-reduction exprs))
+     expr)
+    (($ collection/k _ var type size value body)
+     (collection/k-value-set! expr (eta-reduction value))
+     (collection/k-body-set expr (eta-reduction body))
+     expr)
     (else expr)))
 
 (define (normalize expr)
