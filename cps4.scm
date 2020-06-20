@@ -240,7 +240,7 @@
      (let ((f (gensym "f"))
            (k (gensym "k"))
            (nv (map (lambda (v) (gensym (symbol->string v))) v)))
-       `(letval ((,f ,(alpha-renaming `(lambda (,k ,@nv) ,(expr->cps body k) v)
+       `(letfun ((,f ,(alpha-renaming `(lambda (,k ,@nv) ,(expr->cps body k) v)
                                       v nv)))
           (,cont ,f))))
     (('let ((v e)) body)

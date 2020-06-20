@@ -60,8 +60,8 @@
 
 (define-typed-record insr-proc (parent insr)
   (fields
-   (entry string?) ; entry should be a label
-   (frame )))
+   (entry id?) ; entry should be a label
+   (env env?)))
 
 (define-typed-record insr-label (parent insr)
   (fields
@@ -82,6 +82,13 @@
   (fields
    (offset integer?)))
 
+;; Pop ss[offset] to TOS
+(define-typed-record insr-free (parent insr)
+  (fields
+   ;; We convert the label to string since we will generate label pattern in codegen
+   (label string?)
+   (offset integer?)))
+
 ;; jump if TOS is false
 (define-typed-record insr-fjump (parent insr))
 
@@ -89,7 +96,9 @@
 
 ;; application
 (define-typed-record insr-app (parent insr)
-  (fields ))
+  (fields
+   (label string?)
+   (args list?)))
 
 ;; closure
 (define-typed-record insr-closure (parent insr)
@@ -99,9 +108,7 @@
 
 (define (cps->lir cps)
   (($ lambda/k ($ cps _ kont name attr) args body)
-   (let ((size (label->stack-size name)))
-     ()
-     ))
+   )
   (($ closure/k ($ cps _ kont name attr) env body)
    )
   (($ branck/k ($ cps _ kont name attr) cnd b1 b2)
@@ -118,17 +125,18 @@
   (($ collection/k ($ cps _ kont name attr) var type size value body)
    )
   (($ seq/k ($ cps _ kont name attr) exprs)
-   )
+   (make-insr-label name (map cps->lir exprs)))
   (($ letfun/k ($ bind-special-form/k ($ cps _ kont name attr) fname fun body))
-   )
+   (let ((label (id->string fname)))
+     ))
   (($ letcont/k ($ bind-special-form/k ($ cps _ kont name attr) jname jcont body))
    )
   (($ letval/k ($ bind-special-form/k ($ cps _ kont name attr) var value body))
    )
-  (($ app/k ($ cps _ kont name attr) f e)
-   )
+  (($ app/k ($ cps _ kont name attr) func args)
+   (make-insr-app (cps->lir func) (map cps->lir args)))
   (($ lvar _ offset)
-   )
-  (($ fvar _ offset)
-   ())
+   (make-insr-local offset))
+  (($ fvar _ label offset)
+   (make-insr-free (id->string label) offset))
   (else (throw 'pi-error cps->lir "Invalid cps `~a'!" cps)))

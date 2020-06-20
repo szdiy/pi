@@ -141,6 +141,9 @@
          (name (newsym orig-fix)))
     (make-id name orig-fix)))
 
+(define (id->string id)
+  (symbol->string (id-name id)))
+
 (define (id-eq? x y)
   (when (or (not (id? x)) (not (id? y)))
     (throw 'pi-error id-eq?

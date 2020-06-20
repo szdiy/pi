@@ -73,14 +73,16 @@
 (define (extend-env to new)
   (env-prev-set! to new))
 
-(define (id-index q id)
-  (slot-index q (lambda (x) (id-eq? x id))))
+(define (id-index env ref id)
+  (when (not (env? env))
+    (throw 'pi-error id-index "`~a' is invalid env for ~a!" env ref))
+  (slot-index (ref env) (lambda (x) (id-eq? x id))))
 
 (define (bindings-index env k)
-  (slot-index env-bindings k))
+  (id-index env env-bindings k))
 
 (define (frees-index env k)
-  (slot-index (env-frees env) k))
+  (id-index env env-frees k))
 
 (define (binding-exists? env id)
   (let ((bindings (env-bindings env))

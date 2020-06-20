@@ -31,23 +31,6 @@
 (define (closure-ref label)
   (hash-ref *closure-lookup-table* label))
 
-;; Add free vars
-(define (add-frees! env frees)
-  (let ((ef (env-frees env)))
-    (for-each (lambda (fv) (queue-in! ef fv)) frees)))
-
-(define (alive-frees env expr)
-  (let ((outter-frees (queue-slot (env-frees env)))
-        (inner-frees (free-vars expr)))
-    (fold (lambda (x p)
-            (if (env-exists? env x)
-                (cons x p)
-                p))
-          '() outter-frees)))
-
-(define (get-fvar-base env)
-  (length (queue-length (env-bindings env))))
-
 (define current-env (make-parameter *top-level*))
 (define current-kont (make-parameter prim:halt))
 
@@ -68,9 +51,9 @@
 (define* (closure-conversion cps)
   (match cps
     (($ lambda/k ($ cps _ kont name attr) args body)
-     (let ((nv (new-env args)))
+     (let ((env (new-env args)))
        (closure-set! name env)
-       (parameterize ((current-env nv)
+       (parameterize ((current-env env)
                       (current-kont cps))
          (make-lambda/k kont name attr args (closure-conversion body))))
      ;; TODO:
@@ -81,7 +64,7 @@
     #;
     (($ closure/k ($ cps _ kont name attr) env body)
     ;; TODO: The escaping function will be converted to closure/k.
-    ;;       This may need escaping analysis or liveness analysis.
+    ;;       This will need escaping analysis or liveness analysis.
     )
     (($ branch/k ($ cps _ kont name attr) cnd b1 b2)
      (make-branch/k kont name attr
@@ -118,5 +101,6 @@
         ((frees-index env id)
          => (lambda (index)
               (make-fvar label index)))
-        (else (throw 'pi-error closure-conversion "Undefined variable `~a'!")))))
+        (else (throw 'pi-error closure-conversion "Undefined variable `~a'!"
+                     (id-name cps))))))
     (else cps)))

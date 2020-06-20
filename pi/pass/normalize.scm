@@ -21,8 +21,30 @@
   #:use-module (ice-9 match)
   #:use-module (srfi srfi-1))
 
-;; NOTE: Only normal-order language uses normalize pass,
-;;       the applicative-order language like Scheme won't use it.
+;; NOTE: We can even perform normalization for applicative-order language like
+;;       Scheme after CPS transformation, since the result of all the expressions
+;;       had been bounded by the continuation, which guarantees applicative-order.
+;;       That's why we only perform normalize/preserving to preserve the binding
+;;       of continuations: letval/letcont/letfun...etc, say:
+;;       (let ((x (+ 1 2))) (+ x x))
+;;       ==>
+;;       (letcont ((j (lambda (K)
+;;                     ((lambda (k1)
+;;                       ((lambda (k2)
+;;                         ((lambda (k3) (k1 k3 k2))
+;;                          K))
+;;                        K))
+;;                      +))))
+;;        (letval ((y 2))
+;;          (letval ((z 1))
+;;            (j (+ y z)))))
+;;       Please notice that K is the variable which bounds the result of (+ 1 2),
+;;       after CPS transformation, it's (+ y z), and it was applied in two places
+;;       that K appeared. So (+ 1 2) was evaluated just once.
+;;       If we don't preserve them, then the program was converted to normal-order.
+;;       ==> (+ (+ 1 2) (+ 1 2))
+;;       The (+ 1 2) was substituted to two places, and (+ 1 2) will be evaluated
+;;       twice. So it's typical normal-order.
 ;;
 ;; NOTE: Please notice that the normalize pass is actually normalize/preserving,
 ;;       since it only substitutes the regular let bindings, and preserving
