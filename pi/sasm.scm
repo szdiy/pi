@@ -18,6 +18,7 @@
   #:use-module (pi utils)
   #:use-module (srfi srfi-1)
   #:use-module (ice-9 match)
+  #:use-module (ice-9 format)
   #:export (sasm-emit
             get-all-sasm
             sasm-output
@@ -36,78 +37,117 @@
       ('stay (gen-spaces))
       ('in (set! level (1+ level)))
       ('out (set! level (1- level)))))
-  (call-with-output-string
-    (lambda (port)
-      (format port "(lef~%")
-      (for-each
-       (lambda (pattern)
-         (match pattern
-           ((insr . descp)
-            (format port "~a~a ; ~a~%" (indent-spaces) insr descp))
-           (('label-begin label)
-            (indent-spaces 'in)
-            (format port "~a(~a ; Label ~a begin~%" (indent-spaces) label label))
-           (('label-end label)
-            (format port "~a)~a ; Label ~a end~%" (indent-spaces) label label)
-            (indent-spaces 'out))
-           ('prog-begin
-            (format port "(program~%")
-            (indent-spaces 'in))
-           ('prog-end
-            (format port "~a) ; Program end~%" (indent-spaces))
-            (indent-spaces 'out))
-           ('memory-begin
-            (format port "(memory~%")
-            (indent-spaces 'in))
-           ('memory-end
-            (format port "~a) ; Memory end~%" (indent-spaces))
-            (indent-spaces 'out))
-           ('clean-begin
-            (format port "(clean~%")
-            (indent-spaces 'in))
-           ('clean-end
-            (format port "~a) ; Clean end~%" (indent-spaces))
-            (indent-spaces 'out))
-           (('closure-prelude argc)
-            (format port "~a) ; Clean end~%" (indent-spaces))
-            (indent-spaces 'out))
-           (else (throw 'pi-error 'sasm-output "Invalid pattern `~a'!" pattern))))
-       (get-all-sasm))
-      (format port ") ; End LEF~%"))))
+  (format #t "(lef~%")
+  (for-each
+   (lambda (pattern)
+     (match pattern
+       ((insr . descp)
+        (format #t "~a~a ; ~a~%" (indent-spaces) insr descp))
+       (('label-begin label)
+        (indent-spaces 'in)
+        (format #t "~a(~a ; Label ~a begin~%" (indent-spaces) label label))
+       (('label-end label)
+        (format #t "~a)~a ; Label ~a end~%" (indent-spaces) label label)
+        (indent-spaces 'out))
+       ('prog-begin
+        (format #t "(program~%")
+        (indent-spaces 'in))
+       ('prog-end
+        (format #t "~a) ; Program end~%" (indent-spaces))
+        (indent-spaces 'out))
+       ('memory-begin
+        (format #t "(memory~%")
+        (indent-spaces 'in))
+       ('memory-end
+        (format #t "~a) ; Memory end~%" (indent-spaces))
+        (indent-spaces 'out))
+       ('clean-begin
+        (format #t "(clean~%")
+        (indent-spaces 'in))
+       ('clean-end
+        (format #t "~a) ; Clean end~%" (indent-spaces))
+        (indent-spaces 'out))
+       (('closure-prelude argc)
+        (format #t "~a) ; Clean end~%" (indent-spaces))
+        (indent-spaces 'out))
+       (else (throw 'pi-error 'sasm-output "Invalid pattern `~a'!" pattern))))
+   (get-all-sasm))
+  (format #t ") ; End LEF~%"))
 
 (define (sasm-emit expr) (queue-in! *sasm-queue* expr))
 
-(define (sasm-true)
+(define-public (sasm-true)
   (sasm-emit
    '((push-4bit-const 1) . "Boolean true")))
 
-(define (sasm-true)
+(define-public (sasm-true)
   (sasm-emit
    '((push-4bit-const 0) . "Boolean false")))
 
-(define (sasm-program-begin)
+(define-public (emit-constant type i)
+  (if (integer-check i type)
+      `((push-4bit-const ,i) . (format #f "Constant 0x~X" ,i))
+      (throw 'pi-error "Invalid integer value!" i)))
+
+(define-public (emit-4bit-const i)
+  (emit-constant 'u4 i))
+
+(define-public (emit-8bit-const i)
+  (emit-constant 's8 i))
+
+(define-public (emit-16bit-const i)
+  (emit-constant 's16 i))
+
+(define-public (emit-boolean b)
+  (match b
+    (($ constant _ 'boolean v)
+     (if v
+         (sasm-true)
+         (sasm-false)))
+    (else (throw 'pi-error 'emit-boolean "Invalid boolean value `~a'!" b))))
+
+(define-public (emit-char c)
+  (if (char? c)
+      (let ((i (char->integer c)))
+        (if (integer-check i 'u8)
+            (current-backend-integer i)
+            (throw 'pi-error "emit-char: Unicode is not supported!" i)))
+      (throw 'pi-error "Invalid char value!" c)))
+
+(define-public (emit-integer i)
+
+  )
+
+(define-public (emit-imm x)
+  (cond
+   ((is-integer? x) (emit-integer (constant-val x)))
+   ((is-boolean? x) (emit-boolean (constant-val x)))
+   ((is-char? x) (emit-char (constant-val x)))
+   (else (throw 'pi-error emit-imm "Invalid immediate `~a`!" x))))
+
+(define-public (sasm-program-begin)
   (sasm-emit 'prog-start))
 
-(define (sasm-program-end)
+(define-public (sasm-program-end)
   (sasm-emit 'prog-end))
 
-(define (sasm-memory-begin)
+(define-public (sasm-memory-begin)
   (sasm-emit 'memory-start))
 
-(define (sasm-memory-begin)
+(define-public (sasm-memory-begin)
   (sasm-emit 'memory-start))
 
-(define (sasm-clean-begin)
+(define-public (sasm-clean-begin)
   (sasm-emit 'clean-start))
 
-(define (sasm-clean-begin)
+(define-public (sasm-clean-begin)
   (sasm-emit 'clean-start))
 
-(define (sasm-label-begin label)
+(define-public (sasm-label-begin label)
   (sasm-emit '(label-start ,label)))
 
-(define (sasm-label-end label)
+(define-public (sasm-label-end label)
   (sasm-emit `(label-end ,label)))
 
-(define (sasm-closure-prelude argc)
+(define-public (sasm-closure-prelude argc)
   (sasm-emit '((pop-16bit-const ,argc) . (format #f "Pop ~a args" argc))))

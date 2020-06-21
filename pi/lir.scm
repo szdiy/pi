@@ -108,9 +108,10 @@
 
 (define (cps->lir cps)
   (($ lambda/k ($ cps _ kont name attr) args body)
-   )
-  (($ closure/k ($ cps _ kont name attr) env body)
-   )
+   (make-insr-proc ))
+  #;
+  (($ closure/k ($ cps _ kont name attr) env body) ;
+  )
   (($ branck/k ($ cps _ kont name attr) cnd b1 b2)
    (let ((ce (cps->lir cnd env))
          (bt (cps->lir b1 env))
@@ -122,9 +123,10 @@
        (make-insr-fjump (cps-name bf))
        bt
        bf))))
-  #; TODO
-  (($ collection/k ($ cps _ kont name attr) var type size value body) ;
-   )
+  #;
+  ;; TODO                               ;
+  (($ collection/k ($ cps _ kont name attr) var type size value body) ; ;
+  )
   (($ seq/k ($ cps _ kont name attr) exprs)
    (make-insr-label name (map cps->lir exprs)))
   (($ letfun/k ($ bind-special-form/k ($ cps _ kont name attr) fname fun body))
@@ -133,18 +135,28 @@
    ;;    function which can be looked up from top-level.
    ;; 2. For escaping function, there must be a closure. So we will take advantage
    ;;    of the specific instruction of the VM.
-   (let ((label (id->string fname)))
+   (let* ((label (id->string fname))
+          (cont (cps->lir body))
+          (insr (make-insr-label label (cps->lir fun))))
+     (cond
+      ((lir? cont) (list insr cont))
+      ((list? cont) `(,insr ,@cont))
+      (else (throw 'pi-error cps->lir "Invalid cont `~a' in letfun/k!" cont)))
      ;; TODO:
-     ;; Implement it when we have lambda-lifting.
-     '()))
+     ;; Don't forget this is based on lambda-lifting that we haven't done.
+     ))
   (($ letcont/k ($ bind-special-form/k ($ cps _ kont name attr) jname jcont body))
    ;; NOTE: All the inside-defined bindings are flattened, and pushed into the env
    ;;       frame of the function.
    ;; TODO: The ref checking should be in closure-conversion.
    '())
   (($ letval/k ($ bind-special-form/k ($ cps _ kont name attr) var value body))
-   `(,(make-instr-push value)
-     ,@(cps->lir body)))
+   (let ((insr (make-instr-push value))
+         (cont (cps->lir body)))
+     (cond
+      ((lir? cont) (list insr cont))
+      ((list? cont) `(insr ,@cont))
+      (else (throw 'pi-error cps->lir "Invalid cont `~a' in letval/k!" cont)))))
   (($ app/k ($ cps _ kont name attr) func args)
    ;; NOTE: After normalize, the func never be anonymous function, it must be an id.
    (make-insr-app (cps->lir func) (map cps->lir args)))

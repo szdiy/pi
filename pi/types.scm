@@ -108,7 +108,8 @@
        (memq (constant-type x) *immediate-type-nodes*)))
 
 (define *integer-range*
-  '((u8 . (0 . 255))
+  '((u4 . (0 . 15))
+    (u8 . (0 . 255))
     (s8 . (-128 . 127))
     (u16 . (0 . 65535))
     (s16 . (-32768 . 32767))
