@@ -37,6 +37,10 @@
             char-object?
             make-char-object))
 
+;; NOTE:
+;; 1. If the value can be unboxed, then we store them in unboxed style
+;; 2. char and boolean are globally unique, so no unboxing available
+
 (define-record-type object)
 
 (define (object-list? lst)
