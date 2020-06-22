@@ -89,15 +89,6 @@
       `((push-4bit-const ,i) . (format #f "Constant 0x~X" ,i))
       (throw 'pi-error "Invalid integer value!" i)))
 
-(define-public (emit-4bit-const i)
-  (emit-constant 'u4 i))
-
-(define-public (emit-8bit-const i)
-  (emit-constant 's8 i))
-
-(define-public (emit-16bit-const i)
-  (emit-constant 's16 i))
-
 (define-public (emit-boolean b)
   (match b
     (($ constant _ 'boolean v)
@@ -115,10 +106,10 @@
       (throw 'pi-error "Invalid char value!" c)))
 
 (define-public (emit-integer i)
+  (emit-constant (detect-minimum-range i) i))
 
-  )
-
-(define-public (emit-imm x)
+;; This is only for const unboxing
+(define-public (emit-const-imm x)
   (cond
    ((is-integer? x) (emit-integer (constant-val x)))
    ((is-boolean? x) (emit-boolean (constant-val x)))

@@ -52,6 +52,13 @@
 ;;    lookup by offset.
 ;; 5. The inner defined functions are all sorted as closures.
 ;; 6. The procedure must be defined in toplevel.
+;;
+;;
+;; The optimizings in LIR:
+;; 1. Integer unboxing
+;;    TODO: The independent const integer can be unboxed from object struct,
+;;          however, we have to substitute all the references of that const integer.
+
 
 (define-record-type insr)
 
@@ -151,7 +158,7 @@
    ;; TODO: The ref checking should be in closure-conversion.
    '())
   (($ letval/k ($ bind-special-form/k ($ cps _ kont name attr) var value body))
-   (let ((insr (make-instr-push value))
+   (let ((insr (make-instr-push (cps->lir value)))
          (cont (cps->lir body)))
      (cond
       ((lir? cont) (list insr cont))
@@ -160,6 +167,10 @@
   (($ app/k ($ cps _ kont name attr) func args)
    ;; NOTE: After normalize, the func never be anonymous function, it must be an id.
    (make-insr-app (cps->lir func) (map cps->lir args)))
+  (($ constant/k _ value)
+   ;; NOTE: value is constant type.
+   ;; NOTE: char and boolean shouldn't be unboxed.
+   )
   (($ lvar _ offset)
    (make-insr-local offset))
   (($ fvar _ label offset)

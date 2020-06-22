@@ -24,6 +24,7 @@
             make-constant
             constant-val
             constant-type
+            detect-minimum-range
             detect-literal-type
             *pi/unspecified*
             gen-constant
@@ -109,18 +110,22 @@
 
 (define *integer-range*
   '((u4 . (0 . 15))
-    (u8 . (0 . 255))
     (s8 . (-128 . 127))
-    (u16 . (0 . 65535))
+    (u8 . (0 . 255))
     (s16 . (-32768 . 32767))
-    (u32 . (0 . 4294967295))
-    (s32 . (-2147483648 . 2147483647))))
+    (u16 . (0 . 65535))
+    (s32 . (-2147483648 . 2147483647))
+    (u32 . (0 . 4294967295))))
+
+(define (detect-minimum-range i)
+  (or (any (lambda (t) (and (integer-check i t) t)) *integer-range*)
+      (throw 'pi-error detect-minimum-range "Out of integer range `~a'" i)))
 
 (define (integer-check x subtype)
   (if (integer? x)
       (let ((range (assoc-ref *integer-range* x)))
         (and (> x (car range)) (< x (cdr range))))
-      (throw 'pi-error (format #f "'~a' is not an integer!" x))))
+      (throw 'pi-error integer-check "`~a' is not an integer!" x)))
 
 (define *immediates-pred*
   (list integer? string? char? boolean? pair? list? vector?))

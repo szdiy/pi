@@ -40,6 +40,11 @@
             closure/k-body closure/k-body-set!
             make-closure/k new-closure/k
 
+            constant/k constant/k?
+            constant/k-env constant/k-env-set!
+            constant/k-body constant/k-body-set!
+            make-constant/k new-constant/k
+
             bind-special-form/k bind-special-form/k?
             bind-special-form/k-var bind-special-form/k-var-set!
             bind-special-form/k-value bind-special-form/k-value-set!
@@ -137,10 +142,17 @@
                         (attr '()))
   (make-lambda/k (list kont name attr) env body))
 
+(define-typed-record constant/k (parent cps)
+  (fields
+   (value constant?)))
+(define* (new-constant/k value #:key (kont prim:halt) (name (new-id "kont-"))
+                         (attr '()))
+  (make-constant/k (list kont name attr) value))
+
 (define-typed-record bind-special-form/k (parent cps)
   (fields
    (var id?)
-   (value cps? constant?)
+   (value constant/k?)
    (body cps?)))
 
 (define-typed-record letval/k (parent bind-special-form/k))
@@ -464,8 +476,8 @@
      `(letval ((,(cps->expr var) ,(cps->expr value))) ,(cps->expr body)))
     (($ app/k _ f e)
      `(,(cps->expr f) ,@(map cps->expr e)))
+    (($ constant/k _ ($ constant _ val type)) val)
     (($ id _ name _) name)
-    (($ constant _ val type) val)
     (($ primitive _ name _ _ _) name)
     (else (throw 'pi-error 'cps->expr "Wrong cps: " cps))))
 
