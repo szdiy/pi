@@ -27,8 +27,14 @@
 ;; lir -> unspecified
 (define (emit-sasm lir)
   (match lir
-
-    ))
+    (($ insr-app _ label args)
+     (for-each emit-sasm args)
+     (emit-call-proc (length e) label))
+    (($ insr-prim-call _))
+    (($ integer-object _ i)
+     (emit-const-imm i))
+    (($ insr-prim _ p)
+     (emit-prim-call p))))
 
 (define (codegen lir filename)
   (call-with-output-file filename sasm-output))

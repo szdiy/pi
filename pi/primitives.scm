@@ -75,6 +75,21 @@
             side-effect?
             func))))))
 
+;; Of course, we can record the primitive number when defining the primitive with
+;; a macro. However, a explicit table is useful for debug.
+(define *prim-table*
+  '((halt . 0)
+    (+ . 1)
+    (- . 2)
+    (* . 3)
+    (/ . 4)))
+
+(define (primitive->number p)
+  (cond
+   ((assoc-ref *prim-table* (primitive-name p)) => identity)
+   (else (throw 'pi-error primitive->number "Invalid primitive name `~a'!"
+                (primitive-name p)))))
+
 ;; halt can associate with primitive `halt', its activity is TOS.
 (define-primitive (halt x)
   (error 'prim:halt "It's not implemented!"))

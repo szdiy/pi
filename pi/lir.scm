@@ -97,9 +97,13 @@
    (offset integer?)))
 
 ;; jump if TOS is false
-(define-typed-record insr-fjump (parent insr))
+(define-typed-record insr-fjump (parent insr)
+  (fields
+   (label string?)))
 
-(define-record-type insr-prim (parent insr) (fields op)) ; primitive
+(define-typed-type insr-prim (parent insr)
+  (fields
+   (op primitive?)))
 
 ;; application
 (define-typed-record insr-app (parent insr)
@@ -166,11 +170,16 @@
       (else (throw 'pi-error cps->lir "Invalid cont `~a' in letval/k!" cont)))))
   (($ app/k ($ cps _ kont name attr) func args)
    ;; NOTE: After normalize, the func never be anonymous function, it must be an id.
-   (make-insr-app (cps->lir func) (map cps->lir args)))
+   (let ((f (cps->lir func))
+         (e (map cps->lir args)))
+     (cond
+      ((primitive? f) (make-prim-call f e))
+      ((id? f) (make-insr-app f e))
+      (else (throw 'pi-error cps->lir "Invalid func `~a'!" f)))))
   (($ constant/k _ value)
    ;; NOTE: value is constant type.
    ;; NOTE: char and boolean shouldn't be unboxed.
-   )
+   (create-object value))
   (($ lvar _ offset)
    (make-insr-local offset))
   (($ fvar _ label offset)

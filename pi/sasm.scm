@@ -86,7 +86,7 @@
 
 (define-public (emit-constant type i)
   (if (integer-check i type)
-      `((push-4bit-const ,i) . (format #f "Constant 0x~X" ,i))
+      (sasm-imit `((push-4bit-const ,i) . (format #f "Constant 0x~X" ,i)))
       (throw 'pi-error "Invalid integer value!" i)))
 
 (define-public (emit-boolean b)
@@ -109,12 +109,20 @@
   (emit-constant (detect-minimum-range i) i))
 
 ;; This is only for const unboxing
+;; constant -> unspecified
 (define-public (emit-const-imm x)
   (cond
    ((is-integer? x) (emit-integer (constant-val x)))
    ((is-boolean? x) (emit-boolean (constant-val x)))
    ((is-char? x) (emit-char (constant-val x)))
    (else (throw 'pi-error emit-imm "Invalid immediate `~a`!" x))))
+
+(define-public (emit-call-proc argc label)
+  (sasm-emit `((call-proc ,argc ,label) . "")))
+
+(define-public (emit-prim-call argc p)
+  (sasm-emit `((prim-call ,argc ,(primitive->number p))
+               . (format #f "Call primitive `~a'" (primitive-name p)))))
 
 (define-public (sasm-program-begin)
   (sasm-emit 'prog-start))

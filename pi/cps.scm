@@ -216,7 +216,7 @@
 (define-typed-record app/k (parent cps)
   (fields
    (func applicable?)
-   (args any?)))
+   (args list?)))
 (define* (new-app/k f args #:key (kont prim:halt)
                     (name (new-id "kont-"))
                     (attr '()))
