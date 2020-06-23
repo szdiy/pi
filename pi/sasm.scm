@@ -89,6 +89,9 @@
       (sasm-imit `((push-4bit-const ,i) . (format #f "Constant 0x~X" ,i)))
       (throw 'pi-error "Invalid integer value!" i)))
 
+(define-public (emit-integer-object i)
+  (emit-sasm `((push-integer-object ,i) . "")))
+
 (define-public (emit-boolean b)
   (match b
     (($ constant _ 'boolean v)
