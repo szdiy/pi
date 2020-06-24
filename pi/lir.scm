@@ -150,8 +150,8 @@
           (cont (cps->lir body))
           (insr (make-insr-label label (cps->lir fun))))
      (cond
-      ((lir? cont) (list insr cont))
-      ((list? cont) `(,insr ,@cont))
+      ((lir? cont) (make-insr-label name (list insr cont)))
+      ((list? cont) (make-insr-label name `(,insr ,@cont)))
       (else (throw 'pi-error cps->lir "Invalid cont `~a' in letfun/k!" cont)))
      ;; TODO:
      ;; Don't forget this is based on lambda-lifting that we haven't done.
@@ -165,8 +165,8 @@
    (let ((insr (make-instr-push (cps->lir value)))
          (cont (cps->lir body)))
      (cond
-      ((lir? cont) (list insr cont))
-      ((list? cont) `(insr ,@cont))
+      ((lir? cont) (make-insr-label name (list insr cont)))
+      ((list? cont) (make-insr-label name `(insr ,@cont)))
       (else (throw 'pi-error cps->lir "Invalid cont `~a' in letval/k!" cont)))))
   (($ app/k ($ cps _ kont name attr) func args)
    ;; NOTE: After normalize, the func never be anonymous function, it must be an id.
