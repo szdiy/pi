@@ -33,6 +33,7 @@
     (($ insr-prim-call _ p)
      (emit-prim-call p))
     (($ integer-object _ i)
+     ;; TODO: how to associate the variable?
      (emit-integer-object i))
     (($ insr-prim _ p)
      (emit-prim-call p))

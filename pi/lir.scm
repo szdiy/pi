@@ -161,9 +161,13 @@
    ;;       frame of the function.
    ;; TODO: The ref checking should be in closure-conversion.
    '())
-  (($ letval/k ($ bind-special-form/k ($ cps _ kont name attr) var value body))
-   (let ((insr (make-instr-push (cps->lir value)))
+  (($ letval/k ($ bind-special-form/k
+                  ($ cps _ kont name attr) var ($ constant/k _ value) body))
+   ;; NOTE: value is constant type.
+   ;; NOTE: char and boolean shouldn't be unboxed.
+   (let ((obj (create-object value))
          (cont (cps->lir body)))
+     ;; TODO: substitute all the var reference to the ref-number
      (cond
       ((lir? cont) (make-insr-label name (list insr cont)))
       ((list? cont) (make-insr-label name `(insr ,@cont)))
@@ -177,8 +181,6 @@
       ((id? f) (make-insr-app f e))
       (else (throw 'pi-error cps->lir "Invalid func `~a'!" f)))))
   (($ constant/k _ value)
-   ;; NOTE: value is constant type.
-   ;; NOTE: char and boolean shouldn't be unboxed.
    (create-object value))
   (($ lvar _ offset)
    (make-insr-local offset))
