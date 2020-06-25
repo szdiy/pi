@@ -20,7 +20,7 @@
   #:use-module (pi cps)
   #:use-module ((rnrs) #:select (define-record-type))
   #:export (make-insr
-            insr-subx
+            insr?
 
             make-insr-lit insr-lit-val
             make-insr-ref insr-ref-var
@@ -35,7 +35,7 @@
             make-insr-seq
             insr-seq-exprs
 
-            make-ctx ctx-code ctx-env ctx-upper))
+            cps->lir))
 
 ;; Instruction (insr) is a simple low-level IR, which is a instruction set of
 ;; ACM (Abstract Continuation Machine).
@@ -160,7 +160,7 @@
    ;; NOTE: All the inside-defined bindings are flattened, and pushed into the env
    ;;       frame of the function.
    ;; TODO: The ref checking should be in closure-conversion.
-   '())
+   (throw 'pi-error cps->lir "letcont hasn't implemented yet!" cps))
   (($ letval/k ($ bind-special-form/k
                   ($ cps _ kont name attr) var ($ constant/k _ value) body))
    ;; NOTE: value is constant type.
@@ -169,8 +169,8 @@
          (cont (cps->lir body)))
      ;; TODO: substitute all the var reference to the ref-number
      (cond
-      ((lir? cont) (make-insr-label name (list insr cont)))
-      ((list? cont) (make-insr-label name `(insr ,@cont)))
+      ((lir? cont) (make-insr-label name (list obj cont)))
+      ((list? cont) (make-insr-label name `(,obj ,@cont)))
       (else (throw 'pi-error cps->lir "Invalid cont `~a' in letval/k!" cont)))))
   (($ app/k ($ cps _ kont name attr) func args)
    ;; NOTE: After normalize, the func never be anonymous function, it must be an id.

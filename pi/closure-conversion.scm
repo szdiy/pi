@@ -14,7 +14,7 @@
 ;;  You should have received a copy of the GNU General Public License
 ;;  along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-(define-module (pi closure-conversion)
+(define-module (pi pass closure-conversion)
   #:use-module (pi utils)
   #:use-module (pi types)
   #:use-module (pi cps)
@@ -43,7 +43,7 @@
 ;;    system.
 ;; 4. According to Appel's book, we must perform heap-exhausted test. However,
 ;;    we leave this duty to the VM when it calls procedure each time. This may
-;;    save some RAMs.
+;;    save some RAMs compared to the code injection.
 ;; 5. CPS has no explicit loops, this may cause redundant heap-exhausted test.
 ;;    We may do specific optimizings for tail call in the future.
 ;; 6. Different from the passes, we use CPS constructor here for taking advantage of
@@ -77,9 +77,9 @@
     (($ seq/k ($ cps _ kont name attr) exprs)
      (make-seq/k kont name attr
                  (map (lambda (e) (closure-conversion e)) exprs)))
-    (($ letfun/k ($ bind-special-form/k ($ cps _ kont name attr) fname fun body))
+    (($ letfun/k ($ bind-special-form/k ($ cps _ kont name attr) fname func body))
      (make-letfun/k kont name attr kname
-                    (closure-conversion fun)
+                    (closure-conversion func)
                     (closure-conversion body)))
     (($ letcont/k ($ bind-special-form/k ($ cps _ kont name attr) jname jcont body))
      (make-letcont/k kont name attr jname
