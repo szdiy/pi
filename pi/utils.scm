@@ -52,7 +52,8 @@
             atom?
             args-with-keys
             get-all-defs
-            new-counter))
+            new-counter
+            gen-outfile))
 
 (define (newsym sym) (gensym (symbol->string sym)))
 
@@ -185,3 +186,7 @@
       (cond
        ((integer? step) (set! cnt (+ cnt step)) cnt)
        (else (throw 'pi-error new-counter "Invalid step: `~a`!" step))))))
+
+(define* (gen-outfile filename #:optional (ext ".sasm"))
+  (string-append (substring filename 0 (string-index-right filename #\.))
+                 ext))

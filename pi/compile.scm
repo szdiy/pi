@@ -17,6 +17,7 @@
 (define-module (pi compile)
   #:use-module (pi parser)
   #:use-module (pi pass)
+  #:use-module (pi codegen)
   #:export (compile))
 
 (define (reader port)
@@ -35,17 +36,22 @@
      fold-constant
      delta-reduction
      fold-branch
-     dead-variable-elimination))
+     dead-variable-elimination
+     elre
+     closure-conversion
+     lambda-lifting))
   (top-level-for-each do-optimize)
   (do-optimize cps))
 
 (define (compile filename)
+  (define outfile (gen-outfile filename))
   (when (not (file-exists? filename))
     (error "File doens't exist!" filename))
+  (when (file-exists? outfile)
+    (delete-file outfile))
   (let* ((exprs (call-with-input-file filename reader))
          (ast (map parser exprs))
          (cps (ast->cps ast))
          (cooked (optimize cps))
-         (final (assembler cooked)))
-    ;; TODO
-    #t))
+         (lir (cps->lir cooked)))
+    (codegen lir outfile)))
