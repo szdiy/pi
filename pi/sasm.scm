@@ -16,6 +16,8 @@
 
 (define-module (pi sasm)
   #:use-module (pi utils)
+  #:use-module (pi types)
+  #:use-module (pi primitives)
   #:use-module (srfi srfi-1)
   #:use-module (ice-9 match)
   #:use-module (ice-9 format)
@@ -86,26 +88,21 @@
 
 (define-public (emit-constant type i)
   (if (integer-check i type)
-      (sasm-imit `((push-4bit-const ,i) . (format #f "Constant 0x~X" ,i)))
+      (sasm-emit `((push-4bit-const ,i) . (format #f "Constant 0x~X" ,i)))
       (throw 'pi-error "Invalid integer value!" i)))
 
 (define-public (emit-integer-object i)
-  (emit-sasm `((push-integer-object ,i) . "")))
+  (sasm-emit `((push-integer-object ,i) . "")))
 
 (define-public (emit-boolean b)
-  (match b
-    (($ constant _ 'boolean v)
-     (if v
-         (sasm-true)
-         (sasm-false)))
-    (else (throw 'pi-error 'emit-boolean "Invalid boolean value `~a'!" b))))
+  (if b
+      (sasm-true)
+      (sasm-false)))
 
 (define-public (emit-char c)
   (if (char? c)
-      (let ((i (char->integer c)))
-        (if (integer-check i 'u8)
-            (current-backend-integer i)
-            (throw 'pi-error "emit-char: Unicode is not supported!" i)))
+      (sasm-emit
+       `((push-4bit-const ,(char->integer c)) . (format #f "Char `~a'" c)))
       (throw 'pi-error "Invalid char value!" c)))
 
 (define-public (emit-integer i)
@@ -115,10 +112,10 @@
 ;; constant -> unspecified
 (define-public (emit-const-imm x)
   (cond
-   ((is-integer? x) (emit-integer (constant-val x)))
-   ((is-boolean? x) (emit-boolean (constant-val x)))
-   ((is-char? x) (emit-char (constant-val x)))
-   (else (throw 'pi-error emit-imm "Invalid immediate `~a`!" x))))
+   ((is-integer-node? x) (emit-integer (constant-val x)))
+   ((is-boolean-node? x) (emit-boolean (constant-val x)))
+   ((is-char-node? x) (emit-char (constant-val x)))
+   (else (throw 'pi-error emit-const-imm "Invalid immediate `~a`!" x))))
 
 (define-public (emit-call-proc argc label)
   (sasm-emit `((call-proc ,argc ,label) . "")))

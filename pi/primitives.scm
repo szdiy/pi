@@ -31,6 +31,7 @@
             primitive-has-side-effact?
             primitive-impl
             define-primitive
+            primitive->number
 
             special-form
             make-special-form:if
