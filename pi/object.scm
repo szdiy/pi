@@ -17,6 +17,7 @@
 (define-module (pi object)
   #:use-module (pi utils)
   #:use-module (pi types)
+  #:use-module (ice-9 match)
   #:use-module ((rnrs) #:select (define-record-type))
   #:export (create-object
             object?

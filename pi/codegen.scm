@@ -20,23 +20,25 @@
   #:use-module (pi types)
   #:use-module (pi lir)
   #:use-module (pi sasm)
+  #:use-module (pi object)
   #:use-module (ice-9 match)
   #:use-module (ice-9 format)
-  #:export (cps->sasm))
+  #:export (codegen
+            cps->sasm))
 
 ;; lir -> unspecified
 (define (emit-sasm lir)
   (match lir
     (($ insr-app _ label args)
      (for-each emit-sasm args)
-     (emit-call-proc (length e) label))
-    (($ insr-prim-call _ p)
-     (emit-prim-call p))
+     (emit-call-proc (length args) label))
+    (($ insr-prim _ p args)
+     (emit-prim-call (length args) p))
     (($ integer-object _ i)
      ;; TODO: how to associate the variable?
      (emit-integer-object i))
-    (($ insr-prim _ p)
-     (emit-prim-call p))
+    (($ insr-prim _ p args)
+     (emit-prim-call (length args) p))
     (($ insr-label _ label insrs)
      (sasm-label-begin label)
      (for-each emit-sasm insrs)

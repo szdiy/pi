@@ -45,6 +45,7 @@
             new-id
             id-eq?
             id-list?
+            id->string
 
             lvar lvar?
             make-lvar

@@ -124,6 +124,9 @@
   (sasm-emit `((prim-call ,argc ,(primitive->number p))
                . (format #f "Call primitive `~a'" (primitive-name p)))))
 
+(define-public (emit-fjump label)
+  (sasm-emit `((fjump ,label) . "")))
+
 (define-public (sasm-program-begin)
   (sasm-emit 'prog-start))
 

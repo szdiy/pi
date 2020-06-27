@@ -15,9 +15,15 @@
 ;;  along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 (define-module (pi compile)
+  #:use-module (pi utils)
+  #:use-module (pi env)
   #:use-module (pi parser)
   #:use-module (pi pass)
+  #:use-module (pi cps)
+  #:use-module (pi lir)
+  #:use-module (pi types)
   #:use-module (pi codegen)
+  #:use-module (srfi srfi-1)
   #:export (compile))
 
 (define (reader port)
@@ -27,7 +33,7 @@
      (else (lp (cons (read port) ret))))))
 
 (define (optimize cps)
-  (define (do-optmize cps)
+  (define (do-optimize cps)
     (run-pass
      cps
      normalize
