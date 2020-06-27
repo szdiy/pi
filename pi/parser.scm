@@ -209,7 +209,9 @@
        (cond
         ((not f) (throw 'pi-error 'parser "PROC `~a': unbound variable: " op))
         ((macro? f) ((macro-expander f) args))
-        (else (make-call #f f (map (lambda (e) (parse-it e #:use 'value)) args))))))
+        (else
+         (make-call #f (pk "call-f" f)
+                    (map (lambda (e) (parse-it e #:use 'value)) args))))))
     ((? symbol? k) (make-ref #f k))
     ;; NOTE: immediate check has to be the last one!!!
     ((? is-immediate? i) (gen-constant i))

@@ -139,12 +139,12 @@
    ;; For example, the orig of x-123 is x
    (orig symbol?)))
 
-(define* (new-id #:optional (orig "x-"))
+(define* (new-id #:optional (orig "x-") (rename? #t))
   (let* ((orig-fix (cond
                     ((string? orig) (string->symbol orig))
                     ((symbol? orig) orig)
                     (else (throw 'pi-error new-id "Inavlid orig `~a'" orig))))
-         (name (newsym orig-fix)))
+         (name (if rename? (newsym orig-fix) orig-fix)))
     (make-id name orig-fix)))
 
 (define (id->string id)
