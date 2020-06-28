@@ -24,7 +24,14 @@
   #:use-module (pi types)
   #:use-module (pi codegen)
   #:use-module (srfi srfi-1)
+  #:use-module (ice-9 regex)
+  #:use-module (ice-9 ftw)
   #:export (compile))
+
+(define (init-optimizations)
+  (process-use-modules
+   (map (lambda (s) `((pi pass ,(string->symbol (file-basename s)))))
+        (scandir "pi/pass" (lambda (s) (string-match "\\.scm" s))))))
 
 (define (reader port)
   (let lp((ret '()))
@@ -46,6 +53,8 @@
      elre
      closure-conversion
      lambda-lifting))
+  (display "optimize\n")
+  (init-optimizations)
   (top-level-for-each do-optimize)
   (do-optimize cps))
 

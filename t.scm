@@ -1,5 +1,6 @@
 (use-modules (pi parser)
              (pi cps)
+             (pi pass normalize)
              (ice-9 pretty-print))
 
 (define e '(+ 1 1))
@@ -11,3 +12,5 @@
 (define c (ast->cps a))
 (pretty-print c)
 (pretty-print (cps->expr c))
+(define o ((@@ (pi compile) optimize) c))
+(pretty-print (cps->expr o))

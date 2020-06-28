@@ -18,6 +18,9 @@
   #:use-module (pi utils)
   #:use-module (pi cps)
   #:use-module (pi pass)
+  #:use-module (pi types)
+  #:use-module (pi env)
+  #:use-module (pi pass normalize)
   #:use-module (ice-9 match))
 
 ;; The all-ref-vars will count all appear variables, include the local definition,
@@ -41,7 +44,7 @@
 ;; unfortunately, we don't have env in this direct CPS implementation, so it's
 ;; too hard to trace back the definition of the function.
 ;; NOTE: Must be applied after alpha-renaming.
-(define (func-inline cps #:optional (refs (make-ref-table cps)))
+(define* (func-inline cps #:optional (refs (make-ref-table cps)))
   (define (inlineable-local-func? f) (= 2 (hash-ref refs f 0)))
   (match cps
     (($ letcont/k ($ bind-special-form/k _ _ e
@@ -51,7 +54,7 @@
         (new-app/k (func-inline e refs) (func-inline fbody refs)))))
     (($ app/k _ ($ lambda/k _ v body) e)
      (cond
-      ((and (id? e) (topref e))
+      ((and (id? e) (top-level-ref e))
        => (lambda (func-body)
             (top-level-delete! e)
             (lambda/k-body-set! (app/k-func cps) (func-inline body refs))

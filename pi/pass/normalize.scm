@@ -19,7 +19,9 @@
   #:use-module (pi types)
   #:use-module (pi pass)
   #:use-module (ice-9 match)
-  #:use-module (srfi srfi-1))
+  #:use-module (srfi srfi-1)
+  #:export (normalize/preserving
+            beta-reduction/preserving))
 
 ;; NOTE: After normalize, there's no ((lambda ...) args), all the applications will
 ;;       be (id args). This is useful in codegen.
@@ -132,9 +134,8 @@
     (($ seq/k _ e)
      (seq/k-exprs-set! expr (map beta-reduction/preserving e))
      expr)
-    (($ collection/k _ var type size value body)
+    (($ collection/k _ var type size value)
      (collection/k-value-set! expr (beta-reduction/preserving value))
-     (collection/k-body-set expr (beta-reduction/preserving body))
      expr)
     (else expr)))
 
@@ -152,9 +153,8 @@
      ;;(display "eta-1\n")
      (seq/k-exprs-set! expr (map eta-reduction exprs))
      expr)
-    (($ collection/k _ var type size value body)
+    (($ collection/k _ var type size value)
      (collection/k-value-set! expr (eta-reduction value))
-     (collection/k-body-set expr (eta-reduction body))
      expr)
     (else expr)))
 

@@ -19,11 +19,12 @@
   #:use-module (pi types)
   #:use-module (pi cps)
   #:use-module (pi env)
+  #:use-module (pi primitives)
+  #:use-module (pi pass)
   #:use-module (ice-9 match)
   #:use-module ((srfi srfi-1) #:select (fold))
   #:use-module ((rnrs) #:select (define-record-type))
-  #:export (closure-conversion
-            closure-ref))
+  #:export (closure-ref))
 
 (define *closure-lookup-table* (make-hash-table))
 (define (closure-set! label bindings)
@@ -55,7 +56,7 @@
        (closure-set! name env)
        (parameterize ((current-env env)
                       (current-kont cps))
-         (make-lambda/k kont name attr args (closure-conversion body))))
+         (make-lambda/k (list kont name attr) args (closure-conversion body))))
      ;; TODO:
      ;; 1. recording the current bindings by the label to lookup table
      ;; 2. replacing all the appeared free variable to `fvar' by label and order num
@@ -67,30 +68,34 @@
     ;;       This will need escaping analysis or liveness analysis.
     )
     (($ branch/k ($ cps _ kont name attr) cnd b1 b2)
-     (make-branch/k kont name attr
+     (make-branch/k (list kont name attr)
                     (closure-conversion cnd)
                     (closure-conversion b1)
                     (closure-conversion b2)))
-    (($ collection/k ($ cps _ kont name attr) var type size value body)
-     (make-collection/k kont name attr var type size value
-                        (closure-conversion body)))
+    (($ collection/k ($ cps _ kont name attr) var type size value)
+     (make-collection/k (list kont name attr)
+                        var type size
+                        (closure-conversion value)))
     (($ seq/k ($ cps _ kont name attr) exprs)
-     (make-seq/k kont name attr
+     (make-seq/k (list kont name attr)
                  (map (lambda (e) (closure-conversion e)) exprs)))
     (($ letfun/k ($ bind-special-form/k ($ cps _ kont name attr) fname func body))
-     (make-letfun/k kont name attr kname
+     (make-letfun/k (list kont name attr)
+                    fname
                     (closure-conversion func)
                     (closure-conversion body)))
     (($ letcont/k ($ bind-special-form/k ($ cps _ kont name attr) jname jcont body))
-     (make-letcont/k kont name attr jname
+     (make-letcont/k (list kont name attr)
+                     jname
                      (closure-conversion jcont)
                      (closure-conversion body)))
     (($ letval/k ($ bind-special-form/k ($ cps _ kont name attr) var value body))
-     (make-letval/k kont name attr var
+     (make-letval/k (list kont name attr)
+                    var
                     (closure-conversion value)
                     (closure-conversion body)))
     (($ app/k ($ cps _ kont name attr) f e)
-     (make-app/k kont name attr
+     (make-app/k (list kont name attr)
                  (closure-conversion f)
                  (closure-conversion e)))
     ((? id?)
@@ -104,3 +109,5 @@
         (else (throw 'pi-error closure-conversion "Undefined variable `~a'!"
                      (id-name cps))))))
     (else cps)))
+
+(define-pass closure-conversion cps closure-conversion)

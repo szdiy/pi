@@ -168,4 +168,5 @@
 ;; free variable
 (define-typed-record fvar
   (fields
+   (label string?)
    (offset positive?)))

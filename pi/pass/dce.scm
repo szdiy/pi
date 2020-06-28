@@ -71,7 +71,7 @@
 ;; Removes a function definition if it has no applied occurrences outside
 ;; its ownbody.
 (define-pass dead-function-elimination cps
-  (let ((funcs (hash-map->list (lambda (v _) v) *top-level*))
+  (let ((funcs (top-level->body-list))
         (fv (free-vars cps)))
     (for-each top-level-delete! (diff funcs fv))
     cps))

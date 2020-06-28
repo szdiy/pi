@@ -16,7 +16,9 @@
 
 (define-module (pi pass fold-const)
   #:use-module (pi cps)
+  #:use-module (pi utils)
   #:use-module (pi pass)
+  #:use-module (pi pass normalize)
   #:use-module (ice-9 match))
 
 ;; FIXME: We have to tweak fold-const when we have side-effect analysis.
@@ -27,12 +29,12 @@
 ;; 2. (if 1 2 (+ 3 4)) -k-> (letcont ((k (halt (+ 4 3)))) (if 1 2 k))
 (define (fc cps)
   (match cps
-    (($ letval/k _ v e body)
+    (($ letval/k ($ bind-special-form/k _ v e body))
      (fc (normalize/preserving (new-app/k (new-lambda/k v (fc body)) e))))
-    (($ letcont/k _ v ($ app/k _ 'halt (? atom? a)) body)
+    (($ letcont/k ($ bind-special-form/k _ v ($ app/k _ 'halt (? atom? a)) body))
      (fc (normalize/preserving
           (new-app/k (new-lambda/k v (fc body)) a))))
-    ((? app/k app)
+    (($ app/k? app)
      (fc (normalize/preserving app)))
     ((? bind-special-form/k? sf)
      (bind-special-form/k-value-set! sf (fc (bind-special-form/k-value sf)))

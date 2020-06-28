@@ -26,6 +26,7 @@
             top-level-set!
             top-level-delete!
             top-level-for-each
+            top-level->body-list
 
             extend-env
             bindings-index
@@ -57,6 +58,9 @@
     (make-env #f bindings frees)))
 
 (define *top-level* (new-toplevel))
+
+(define (top-level->body-list)
+  (hash-map->list (lambda (v _) v) (toplevel-bindings *top-level*)))
 
 (define (top-level-ref k)
   (hash-ref (toplevel-bindings *top-level*) k))
