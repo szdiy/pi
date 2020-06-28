@@ -31,8 +31,8 @@
 (define (ll cps)
   (match cps
     (($ letfun/k ($ bind-special-form/k _ fname func body))
-     (top-level-set! var value)
-     (ll value)
+     (top-level-set! fname func)
+     (ll func)
      (ll body))
     ((? bind-special-form/k?)
      (bind-special-form/k-value-set! cps (ll (bind-special-form/k-value cps)))
@@ -45,7 +45,7 @@
      cps)
     (($ app/k _ f e)
      ;; After normalize, there's no anonymouse function as f, so we skip f here
-     (app/k-body-set! cps (ll e))
+     (app/k-args-set! cps (ll e))
      cps)
     (($ lambda/k _ args body)
      (lambda/k-body-set! (ll body))

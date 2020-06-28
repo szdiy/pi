@@ -49,14 +49,14 @@
 ;;    We may do specific optimizings for tail call in the future.
 ;; 6. Different from the passes, we use CPS constructor here for taking advantage of
 ;;    type checking in record type.
-(define* (closure-conversion cps)
+(define* (cc cps)
   (match cps
     (($ lambda/k ($ cps _ kont name attr) args body)
      (let ((env (new-env args)))
        (closure-set! name env)
        (parameterize ((current-env env)
                       (current-kont cps))
-         (make-lambda/k (list kont name attr) args (closure-conversion body))))
+         (make-lambda/k (list kont name attr) args (cc body))))
      ;; TODO:
      ;; 1. recording the current bindings by the label to lookup table
      ;; 2. replacing all the appeared free variable to `fvar' by label and order num
@@ -69,35 +69,34 @@
     )
     (($ branch/k ($ cps _ kont name attr) cnd b1 b2)
      (make-branch/k (list kont name attr)
-                    (closure-conversion cnd)
-                    (closure-conversion b1)
-                    (closure-conversion b2)))
+                    (cc cnd)
+                    (cc b1)
+                    (cc b2)))
     (($ collection/k ($ cps _ kont name attr) var type size value)
      (make-collection/k (list kont name attr)
                         var type size
-                        (closure-conversion value)))
+                        (cc value)))
     (($ seq/k ($ cps _ kont name attr) exprs)
-     (make-seq/k (list kont name attr)
-                 (map (lambda (e) (closure-conversion e)) exprs)))
+     (make-seq/k (list kont name attr) (map cc exprs)))
     (($ letfun/k ($ bind-special-form/k ($ cps _ kont name attr) fname func body))
      (make-letfun/k (list kont name attr)
                     fname
-                    (closure-conversion func)
-                    (closure-conversion body)))
+                    (cc func)
+                    (cc body)))
     (($ letcont/k ($ bind-special-form/k ($ cps _ kont name attr) jname jcont body))
      (make-letcont/k (list kont name attr)
                      jname
-                     (closure-conversion jcont)
-                     (closure-conversion body)))
+                     (cc jcont)
+                     (cc body)))
     (($ letval/k ($ bind-special-form/k ($ cps _ kont name attr) var value body))
      (make-letval/k (list kont name attr)
                     var
-                    (closure-conversion value)
-                    (closure-conversion body)))
+                    (cc value)
+                    (cc body)))
     (($ app/k ($ cps _ kont name attr) f e)
      (make-app/k (list kont name attr)
-                 (closure-conversion f)
-                 (closure-conversion e)))
+                 (cc f)
+                 (cc e)))
     ((? id?)
      (let ((env (current-env))
            (label (cps-name (current-kont))))
@@ -106,8 +105,8 @@
         ((frees-index env id)
          => (lambda (index)
               (make-fvar label index)))
-        (else (throw 'pi-error closure-conversion "Undefined variable `~a'!"
+        (else (throw 'pi-error cc "Undefined variable `~a'!"
                      (id-name cps))))))
     (else cps)))
 
-(define-pass closure-conversion cps closure-conversion)
+(define-pass closure-conversion cps (cc cps))
