@@ -45,15 +45,17 @@
     (run-pass
      cps
      normalize
-     function-inline
-     dead-function-elimination
+     ;;function-inline
+     ;; dead-function-elimination
      fold-constant
-     delta-reduction
-     fold-branch
-     dead-variable-elimination
-     elre
-     closure-conversion
-     lambda-lifting))
+     constant-propagation
+     ;; delta-reduction
+     ;; fold-branch
+     ;; dead-variable-elimination
+     ;; elre
+     ;; closure-conversion
+     ;; lambda-lifting
+     ))
   (display "optimize\n")
   (init-optimizations)
   (top-level-for-each do-optimize)

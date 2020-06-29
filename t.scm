@@ -3,9 +3,11 @@
              (pi pass normalize)
              (ice-9 pretty-print))
 
+
+
 #;
-(define e '(let ((y 5))
-(let ((x 1))
+(define e '(let ((y 5))                 ; ;
+(let ((x 1))                            ; ;
 (+ 2 x))))
 (define e '(let ((x 123)) x))
 (display "AST:\n")

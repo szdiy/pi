@@ -241,5 +241,6 @@
       ((= (length subx) 1) (ast->src (car subx)))
       (hide-begin? (map ast->src subx))
       (else `(begin ,@(map ast->src subx)))))
-    (($ var ($ binding _ id) uid _) id)
+    (($ binding ($ ast _ body) var value)
+     `(let ((,(ast->src var) ,(ast->src value))) ,(ast->src body)))
     (else node)))

@@ -304,7 +304,7 @@
 (define (alpha-renaming expr old new)
   (define (rename e)
     (cond
-     ((list-index (lambda (x) (eq? x e)) old)
+     ((list-index (lambda (x) (id-eq? x e)) old)
       => (lambda (i) (list-ref new i)))
      (else e)))
   (match expr
@@ -335,7 +335,7 @@
      (branch/k-tbranch-set! expr (alpha-renaming b1 old new))
      (branch/k-fbranch-set! expr (alpha-renaming b2 old new))
      expr)
-    ((? symbol?) (rename expr))
+    ((? id?) (rename expr))
     (else expr)))
 
 (define (comp-cps expr cont)
@@ -395,17 +395,20 @@
     (($ def ($ ast _ body) var)
      ;; NOTE: The local function definition should be converted to let-binding
      ;;       by AST builder. So the definition that appears here are top-level.
+     ;; NOTE: And the local function definition will be lifted to top-level later.
      (top-level-set! var (ast->cps body cont))
      *pi/unspecified*)
-    (($ binding ($ ast _ body) ($ ref _ var) val)
+    (($ binding ($ ast _ body) ($ ref _ var) value)
      (let* ((jname (new-id "jcont-"))
+            (ov (new-id var #f))
             (nv (new-id var))
             (fk (new-id "letcont/k-"))
-            (jcont (alpha-renaming
-                    (new-lambda/k (list nv) (ast->cps body cont) #:kont cont)
-                    (list var) (list nv))))
+            (jcont (new-lambda/k
+                    (list nv)
+                    (alpha-renaming (ast->cps body cont) (list ov) (list nv))
+                    #:kont cont)))
        (new-letcont/k jname jcont
-                      (alpha-renaming (ast->cps val jname) (list var) (list nv))
+                      (alpha-renaming (ast->cps value jname) (list ov) (list nv))
                       #:kont cont)))
     (($ branch ($ ast _ (cnd b1 b2)))
      (let* ((arg (new-id))
@@ -427,11 +430,11 @@
              (new-collection/k cname type size ex (new-app/k cont cname #:kont cont)
                                #:kont cont)
              vals ex)))
-    (($ seq ($ ast _ e))
+    (($ seq ($ ast _ exprs))
      (let* ((el (fold (lambda (x p)
-                        (let ((ret (ast->cps x cont)))
+                        (let ((ret (ast->cps x)))
                           (if (is-unspecified-node? ret) p (cons ret p))))
-                      '() e))
+                      '() exprs))
             (ev (map (lambda (_) (new-id "k-")) el)))
        (fold (lambda (e v p) (new-letcont/k v e p #:kont cont))
              (new-app/k cont (new-seq/k ev #:kont cont) #:kont cont)
@@ -444,11 +447,9 @@
                        (comp-cps ee (new-lambda/k (list ex) p #:kont cont)))
                      (cond
                       (is-prim?
-                       (display "prim hit!\n")
                        (new-app/k cont (new-app/k is-prim? el #:kont cont)
                                   #:kont cont))
                       (else
-                       (pk "prim not hit!!!!!!!!!" f)
                        (new-app/k fn (append (list cont) el) #:kont cont)))
                      e el)))
        (comp-cps (or is-prim? (new-id f #f))
@@ -458,7 +459,7 @@
       ((is-op-a-primitive? sym)
        => (lambda (p)
             (new-app/k cont p #:kont cont)))
-      ((symbol? sym) (new-app/k cont (new-id sym) #:kont cont))
+      ((symbol? sym) (new-app/k cont (new-id sym #f) #:kont cont))
       (else (throw 'pi-error 'ast->cps "BUG: ref should be symbol! `~a'" sym))))
     ((? id? id) (new-app/k cont id #:kont cont))
     ((? primitive? p) (new-app/k cont p #:kont cont))
