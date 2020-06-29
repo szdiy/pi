@@ -152,10 +152,11 @@
   (symbol->string (id-name id)))
 
 (define (id-eq? x y)
-  (when (or (not (id? x)) (not (id? y)))
-    (throw 'pi-error id-eq?
-           "Invalid id type: `~a', `~a'" x y))
-  (eq? (id-name x) (id-name y)))
+  (cond
+   ((or (not (id? x)) (not (id? y)))
+    #f)
+   (else
+    (eq? (id-name x) (id-name y)))))
 
 (define (id-list? lst)
   (make-object-list-pred lst id?))

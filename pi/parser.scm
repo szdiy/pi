@@ -161,8 +161,8 @@
        (parse-it (dispatch ks vs))))
     (('let ((ks vs) ...) body ...) ; common let
      ;; NOTE: All bindings become single binding here by our CPS design
-     (fold (lambda (k v p) (make-binding p k v)) body ks vs)
-     (make-binding body ks vs))
+     (fold (lambda (k v p) (make-binding p (parse-it k) (parse-it v)))
+           (parse-it `(begin ,@body)) ks vs))
     (('let id ((ks vs) ...) body ...) ; named let
      (parse-it `(letrec ((,id (lambda ,@ks ,@body))) (,id ,@vs))))
     (('let () body ...)
@@ -210,8 +210,7 @@
         ((not f) (throw 'pi-error 'parser "PROC `~a': unbound variable: " op))
         ((macro? f) ((macro-expander f) args))
         (else
-         (make-call #f (pk "call-f" f)
-                    (map (lambda (e) (parse-it e #:use 'value)) args))))))
+         (make-call #f f (map (lambda (e) (parse-it e #:use 'value)) args))))))
     ((? symbol? k) (make-ref #f k))
     ;; NOTE: immediate check has to be the last one!!!
     ((? is-immediate? i) (gen-constant i))

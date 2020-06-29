@@ -58,6 +58,11 @@
    (has-side-effect? boolean?)
    (impl procedure?)))
 
+(define (new-primitive name arity effect? impl)
+  (let ((prim (make-primitive name arity effect? impl)))
+    (primitive-register! name prim)
+    prim))
+
 (define-syntax define-primitive
   (lambda (x)
     (syntax-case x (:has-side-effect)
@@ -70,14 +75,14 @@
       ((_ name side-effect? func)
        #`(define-public
            #,(datum->syntax #'name (symbol-append 'prim: (syntax->datum #'name)))
-           (make-primitive
+           (new-primitive
             'name
             (car (procedure-minimum-arity func))
             side-effect?
             func))))))
 
 ;; Of course, we can record the primitive number when defining the primitive with
-;; a macro. However, a explicit table is useful for debug.
+;; a macro. However, an explicit lookup table is useful for debug.
 (define *prim-table*
   '((halt . 0)
     (+ . 1)
@@ -96,16 +101,16 @@
   (error 'prim:halt "It's not implemented!"))
 
 (define-primitive (+ args ...)
-  (gen-constant (apply + args)))
+  (gen-constant (+ args ...)))
 
 (define-primitive (- args ...)
-  (gen-constant (apply - args)))
+  (gen-constant (- args ...)))
 
 (define-primitive (* args ...)
-  (gen-constant (apply * args)))
+  (gen-constant (* args ...)))
 
 (define-primitive (/ args ...)
-  (gen-constant (apply / args)))
+  (gen-constant (/ args ...)))
 
 #;
 (define-primitive (set! v e)

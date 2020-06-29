@@ -24,18 +24,24 @@
 
 (define (cps-integer? cps)
   (match cps
-    (($ constant _ _ type) (eq? type 'integer))
+    (($ constant/k _ ($ constant _ _ 'integer)) #t)
     (else #f)))
 
 ;; primitive -> cps-list -> cps
 (define (prim-apply p args)
-  (apply (symbol->primitive p) (map constant-val args)))
+  (apply (primitive-impl p)
+         (map (lambda (x) (constant-val (constant/k-value x))) args)))
+
+(define (constant-integer? x)
+  (match x
+    (($ constant _ 'integer v) #t)
+    (else #f)))
 
 ;; NOTE: fold-constant must be applied before, otherwise it doesn't work.
 ;; FIXME: Only pure-functional primitives can be reduced.
 (define (delta cps)
   (define (prim-fold p args)
-    (and (every integer? args)
+    (and (every constant-integer? args)
          (prim-apply p args)))
   (match cps
     (($ app/k _ ($ lambda/k _ v body) e)
@@ -45,7 +51,7 @@
     (($ lambda/k _ v body)
      (lambda/k-body-set! cps (delta body))
      cps)
-    (($ bind-special-form/k _ var value body)
+    ((? bind-special-form/k?)
      (bind-special-form/k-value-set! cps (delta (bind-special-form/k-value cps)))
      (bind-special-form/k-body-set! cps (delta (bind-special-form/k-body cps)))
      cps)
@@ -53,12 +59,13 @@
      (seq/k-exprs-set! cps (map delta exprs))
      cps)
     (($ app/k _ (? id? f) args)
+     (id-name f)
      (app/k-args-set! cps (map delta args))
      cps)
-    (($ app/k _ (? prim? p) args)
+    (($ app/k _ (? primitive? p) args)
      (app/k-args-set! cps (map delta args))
      (if (every cps-integer? args)
-         (prim-apply p (app/k-args cps))
+         (new-constant/k (prim-apply p (app/k-args cps)))
          cps))
     (else cps)))
 

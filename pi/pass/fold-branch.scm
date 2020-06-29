@@ -47,7 +47,7 @@
      (bind-special-form/k-body-set! sf (fb (bind-special-form/k-body sf)))
      sf)
     (($ seq/k _ exprs)
-     (seq/k-set! cps (map fb exprs))
+     (seq/k-exprs-set! cps (map fb exprs))
      cps)
     (else cps)))
 

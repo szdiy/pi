@@ -62,7 +62,7 @@
 (define (cfs expr args el)
   (define (substitute e)
     (cond
-     ((list-index (lambda (x) (eq? x e)) args)
+     ((list-index (lambda (x) (id-eq? x e)) args)
       => (lambda (i) (list-ref el i)))
      (else e)))
   (when (not (= (length args) (length el)))
@@ -82,9 +82,15 @@
      ;;(format #t "cfs 2 ~a~%" expr)
      (seq/k-exprs-set! expr (map (lambda (ee) (cfs ee args el)) exprs))
      expr)
-    (else
-     ;;(format #t "cfs 4 ~a~%" expr)
-     (substitute expr))))
+    ((? bind-special-form/k?)
+     (bind-special-form/k-value-set!
+      expr (cfs (bind-special-form/k-value expr) args el))
+     (bind-special-form/k-body-set!
+      expr (cfs (bind-special-form/k-body expr) args el))
+     expr)
+    (($ id _ name _)
+     (substitute expr))
+    (else expr)))
 
 (define (beta-reduction expr)
   (match expr
@@ -137,6 +143,12 @@
     (($ collection/k _ var type size value)
      (collection/k-value-set! expr (beta-reduction/preserving value))
      expr)
+    ((? bind-special-form/k?)
+     (bind-special-form/k-value-set!
+      expr (beta-reduction/preserving (bind-special-form/k-value expr)))
+     (bind-special-form/k-body-set!
+      expr (beta-reduction/preserving (bind-special-form/k-body expr)))
+     expr)
     (else expr)))
 
 (define (eta-reduction expr)
@@ -155,6 +167,12 @@
      expr)
     (($ collection/k _ var type size value)
      (collection/k-value-set! expr (eta-reduction value))
+     expr)
+    ((? bind-special-form/k?)
+     (bind-special-form/k-value-set!
+      expr (eta-reduction (bind-special-form/k-value expr)))
+     (bind-special-form/k-body-set!
+      expr (eta-reduction (bind-special-form/k-body expr)))
      expr)
     (else expr)))
 

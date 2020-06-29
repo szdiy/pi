@@ -41,8 +41,7 @@
             make-closure/k new-closure/k
 
             constant/k constant/k?
-            constant/k-env constant/k-env-set!
-            constant/k-body constant/k-body-set!
+            constant/k-value constant/k-value-set!
             make-constant/k new-constant/k
 
             bind-special-form/k bind-special-form/k?
@@ -152,7 +151,7 @@
 (define-typed-record bind-special-form/k (parent cps)
   (fields
    (var id?)
-   (value constant/k?)
+   (value cps?)
    (body cps?)))
 
 (define-typed-record letval/k (parent bind-special-form/k))
@@ -325,6 +324,12 @@
      ;;(format #t "alpha 2 ~a~%" expr)
      (seq/k-exprs-set! expr (map (lambda (ee) (alpha-renaming ee old new)) e))
      expr)
+    ((? bind-special-form/k?)
+     (bind-special-form/k-value-set!
+      expr (alpha-renaming (bind-special-form/k-value expr) old new))
+     (bind-special-form/k-body-set!
+      expr (alpha-renaming (bind-special-form/k-body expr) old new))
+     expr)
     (($ branch/k _ cnd b1 b2)
      (branch/k-cnd-set! expr (alpha-renaming cnd old new))
      (branch/k-tbranch-set! expr (alpha-renaming b1 old new))
@@ -392,7 +397,7 @@
      ;;       by AST builder. So the definition that appears here are top-level.
      (top-level-set! var (ast->cps body cont))
      *pi/unspecified*)
-    (($ binding ($ ast _ body) var val)
+    (($ binding ($ ast _ body) ($ ref _ var) val)
      (let* ((jname (new-id "jcont-"))
             (nv (new-id var))
             (fk (new-id "letcont/k-"))
@@ -442,7 +447,9 @@
                        (display "prim hit!\n")
                        (new-app/k cont (new-app/k is-prim? el #:kont cont)
                                   #:kont cont))
-                      (else (new-app/k fn (append (list cont) el) #:kont cont)))
+                      (else
+                       (pk "prim not hit!!!!!!!!!" f)
+                       (new-app/k fn (append (list cont) el) #:kont cont)))
                      e el)))
        (comp-cps (or is-prim? (new-id f #f))
                  (new-lambda/k (list fn) k #:kont cont))))
@@ -450,10 +457,11 @@
      (cond
       ((is-op-a-primitive? sym)
        => (lambda (p)
-            (new-app/k cont (pk "p" p) #:kont cont)))
+            (new-app/k cont p #:kont cont)))
       ((symbol? sym) (new-app/k cont (new-id sym) #:kont cont))
       (else (throw 'pi-error 'ast->cps "BUG: ref should be symbol! `~a'" sym))))
     ((? id? id) (new-app/k cont id #:kont cont))
+    ((? primitive? p) (new-app/k cont p #:kont cont))
     ((? constant? c)
      (let ((x (new-id "x-"))
            (cst (new-constant/k c)))
@@ -474,7 +482,9 @@
     (($ collection/k _ var type size value body)
      `(collection ,type ,@value))
     (($ seq/k _ exprs)
-     `(begin ,@exprs))
+     (if hide-begin?
+         (map cps->expr exprs)
+         `(begin ,@(map cps->expr exprs))))
     (($ letfun/k ($ bind-special-form/k _ fname fun body))
      `(letfun ((,(cps->expr fname) ,(cps->expr fun))) ,(cps->expr body)))
     (($ letcont/k ($ bind-special-form/k _ jname jcont body))

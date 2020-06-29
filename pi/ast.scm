@@ -70,7 +70,8 @@
 (define-record-type collection (parent ast) (fields type size))
 
 ;; for env, var, and macros
-(define-record-type binding (parent ast) (fields ids vals))
+;; NOTE: id and val are single in AST
+(define-record-type binding (parent ast) (fields id val))
 (define-record-type var (parent binding) (fields uid global?))
 (define* (new-var id #:optional (global? #f)) (make-var id (newsym id) global?))
 
