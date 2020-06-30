@@ -30,12 +30,11 @@
 (define (fc expr)
   (match expr
     (($ letval/k ($ bind-special-form/k _ v e body))
-     (fc (normalize/preserving (new-app/k (new-lambda/k (list v) (fc body)) e))))
-    (($ letcont/k ($ bind-special-form/k _ v ($ app/k _ 'halt (? atom? a)) body))
      (fc (normalize/preserving
-          (new-app/k (new-lambda/k v (fc body)) a))))
-    (($ app/k? app)
-     (fc (normalize/preserving app)))
+          (new-app/k (new-lambda/k (list v) (fc body)) (fc e)))))
+    (($ app/k _ f args)
+     (app/k-args-set! expr (map fc args))
+     expr)
     ((? bind-special-form/k?)
      (bind-special-form/k-value-set! expr (fc (bind-special-form/k-value expr)))
      (bind-special-form/k-body-set! expr (fc (bind-special-form/k-body expr)))
@@ -47,6 +46,9 @@
      (branch/k-cnd-set! expr (fc cnd))
      (branch/k-tbranch-set! expr (fc b1))
      (branch/k-fbranch-set! expr (fc b2))
+     expr)
+    (($ lambda/k _ _ body)
+     (lambda/k-body-set! expr (fc body))
      expr)
     (else expr)))
 
