@@ -74,10 +74,10 @@
 (define (create-object c)
   (let ((val (constant-val c)))
     (match (constant-type c)
-      ('integer (make-integer-object val))
-      ('list (make-list-object val))
-      ('vector (make-vector-object val))
-      ('char (make-integer-object val))
+      ('integer (make-integer-object '() val))
+      ('list (make-list-object '() val))
+      ('vector (make-vector-object '() val))
+      ('char (make-integer-object '() val))
       (else (throw 'pi-error create-object "Invalid type `~a'!"
                    (constant-type c))))))
 

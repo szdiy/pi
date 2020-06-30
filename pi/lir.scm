@@ -21,6 +21,7 @@
   #:use-module (pi types)
   #:use-module (pi object)
   #:use-module (pi primitives)
+  #:use-module (pi pass closure-conversion)
   #:use-module (ice-9 match)
   #:use-module ((rnrs) #:select (define-record-type))
   #:export (make-insr
@@ -50,7 +51,8 @@
             insr-label make-insr-label
             insr-label-label insr-label-body
 
-            cps->lir))
+            cps->lir
+            lir->expr))
 
 ;; Instruction (insr) is a simple low-level IR, which is a instruction set of
 ;; ACM (Abstract Continuation Machine).
@@ -136,7 +138,11 @@
 (define (cps->lir expr)
   (match expr
     (($ lambda/k ($ cps _ kont name attr) args body)
-     (make-insr-proc ))
+     (let ((env (closure-ref name)))
+       (when (not env)
+         (throw 'pi-error cps->lir
+                "BUG: the closure label `~a' doesn't have an env!" name))
+       (make-insr-proc '() name env)))
     #;
     (($ closure/k ($ cps _ kont name attr) env body) ;
     )
@@ -145,6 +151,7 @@
            (bt (cps->lir b1))
            (bf (cps->lir b2)))
        (make-insr-label
+        '()
         name
         (list
          (make-insr-push ce)
@@ -156,7 +163,7 @@
     (($ collection/k ($ cps _ kont name attr) var type size value body) ; ;
     )
     (($ seq/k ($ cps _ kont name attr) exprs)
-     (make-insr-label name (map cps->lir exprs)))
+     (make-insr-label '() name (map cps->lir exprs)))
     (($ letfun/k ($ bind-special-form/k ($ cps _ kont name attr) fname fun body))
      ;; NOTE:
      ;; 1. For common function, after lambda-lifting, the function must be lifted to a
@@ -167,8 +174,8 @@
             (cont (cps->lir body))
             (insr (make-insr-label label (cps->lir fun))))
        (cond
-        ((insr? cont) (make-insr-label name (list insr cont)))
-        ((list? cont) (make-insr-label name `(,insr ,@cont)))
+        ((insr? cont) (make-insr-label '() name (list insr cont)))
+        ((list? cont) (make-insr-label '() name `(,insr ,@cont)))
         (else (throw 'pi-error cps->lir "Invalid cont `~a' in letfun/k!" cont)))
        ;; TODO:
        ;; Don't forget this is based on lambda-lifting that we haven't done.
@@ -186,21 +193,36 @@
            (cont (cps->lir body)))
        ;; TODO: substitute all the var reference to the ref-number
        (cond
-        ((insr? cont) (make-insr-label name (list obj cont)))
-        ((list? cont) (make-insr-label name `(,obj ,@cont)))
+        ((insr? cont) (make-insr-label '() name (list obj cont)))
+        ((list? cont) (make-insr-label '() name `(,obj ,@cont)))
         (else (throw 'pi-error cps->lir "Invalid cont `~a' in letval/k!" cont)))))
     (($ app/k ($ cps _ kont name attr) func args)
      ;; NOTE: After normalize, the func never be anonymous function, it must be an id.
-     (let ((f (cps->lir func))
-           (e (map cps->lir args)))
+     (let ((e (map cps->lir args)))
        (cond
-        ((primitive? f) (make-insr-prim f e))
-        ((id? f) (make-insr-app f e))
-        (else (throw 'pi-error cps->lir "Invalid func `~a'!" f)))))
+        ((primitive? func) (make-insr-prim '() func e))
+        ((id? func) (make-insr-app '() func e))
+        (else (throw 'pi-error cps->lir "Invalid func `~a'!" func)))))
     (($ constant/k _ value)
      (create-object value))
     (($ lvar _ offset)
-     (make-insr-local offset))
+     (make-insr-local '() offset))
     (($ fvar _ label offset)
-     (make-insr-free (id->string label) offset))
+     (make-insr-free '() (id->string label) offset))
     (else (throw 'pi-error cps->lir "Invalid cps `~a'!" expr))))
+
+(define (lir->expr lexpr)
+  (match lexpr
+    (($ insr-proc _ label _)
+     `(proc ,label))
+    (($ insr-label _ label exprs)
+     `((label ,label)
+       ,@(map lir->expr exprs)))
+    (($ insr-prim _ p args)
+     `(prim-call ,(primitive-name p) ,@(map lir->expr args)))
+    (($ insr-local _ offset)
+     `(local ,offset))
+    (($ insr-free _ label offset)
+     `(free-var ,label ,offset))
+    (($ integer-object _ value) `(integer ,value))
+    (else (throw 'pi-error lir->expr "Invalid lir `~a'!" lexpr))))
