@@ -447,7 +447,7 @@
                        (comp-cps ee (new-lambda/k (list ex) p #:kont cont)))
                      (cond
                       (is-prim?
-                       (new-app/k cont (new-app/k is-prim? el #:kont cont)
+                       (new-app/k cont (new-app/k fn el #:kont cont)
                                   #:kont cont))
                       (else
                        (new-app/k fn (append (list cont) el) #:kont cont)))

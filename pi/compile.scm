@@ -49,6 +49,7 @@
      dead-function-elimination
      fold-constant
      (constant-propagation 2)
+     useless-cont
      delta-reduction
      fold-branch
      dead-variable-elimination
