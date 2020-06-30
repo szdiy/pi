@@ -23,32 +23,32 @@
 ;; NOTE: fold-constant should be applied before.
 ;; NOTE: after eliminate the dead branch, it's necessary to apply
 ;;       dead-variable-eliminate to reduce the unused branch continuation binding.
-(define (fb cps)
+(define (fb expr)
   (define (detect e)
     (match e
       (($ constant _ val _) val)
       (else 'no)))
-  (match cps
+  (match expr
     (($ branch/k _ cnd b1 b2)
      (let ((result (detect cnd)))
        (match result
-         ('no cps)
+         ('no expr)
          (#f b2)
          (else b1))))
     (($ app/k _ func args)
-     (app/k-func-set! cps (fb func))
-     (app/k-args-set! cps (map fb args))
-     cps)
+     (app/k-func-set! expr (fb func))
+     (app/k-args-set! expr (map fb args))
+     expr)
     (($ lambda/k _ v body)
-     (lambda/k-body-set! cps (fb body))
-     cps)
+     (lambda/k-body-set! expr (fb body))
+     expr)
     ((? bind-special-form/k? sf)
      (bind-special-form/k-value-set! sf (fb (bind-special-form/k-value sf)))
      (bind-special-form/k-body-set! sf (fb (bind-special-form/k-body sf)))
      sf)
     (($ seq/k _ exprs)
-     (seq/k-exprs-set! cps (map fb exprs))
-     cps)
-    (else cps)))
+     (seq/k-exprs-set! expr (map fb exprs))
+     expr)
+    (else expr)))
 
-(define-pass fold-branch cps (fb cps))
+(define-pass fold-branch expr (fb expr))

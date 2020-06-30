@@ -133,8 +133,8 @@
    (env env?)
    (code insr?)))
 
-(define (cps->lir cps)
-  (match cps
+(define (cps->lir expr)
+  (match expr
     (($ lambda/k ($ cps _ kont name attr) args body)
      (make-insr-proc ))
     #;
@@ -177,7 +177,7 @@
      ;; NOTE: All the inside-defined bindings are flattened, and pushed into the env
      ;;       frame of the function.
      ;; TODO: The ref checking should be in closure-conversion.
-     (throw 'pi-error cps->lir "letcont hasn't implemented yet!" cps))
+     (throw 'pi-error cps->lir "letcont hasn't implemented yet!" expr))
     (($ letval/k ($ bind-special-form/k
                     ($ cps _ kont name attr) var ($ constant/k _ value) body))
      ;; NOTE: value is constant type.
@@ -203,4 +203,4 @@
      (make-insr-local offset))
     (($ fvar _ label offset)
      (make-insr-free (id->string label) offset))
-    (else (throw 'pi-error cps->lir "Invalid cps `~a'!" cps))))
+    (else (throw 'pi-error cps->lir "Invalid cps `~a'!" expr))))

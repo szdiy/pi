@@ -233,12 +233,12 @@
                     (bind-special-form/k-value bsf)))
     (else cps)))
 
-(define (vars-fold rec acc op cps)
-  (let ((expr (lambda-desugar cps)))
+(define (vars-fold rec acc op expr)
+  (let ((expr (lambda-desugar expr)))
     (match expr
       ((? id? id) (list id))
       #;
-      ((? assign? cps) ; all-subx-fv + assigned-var
+      ((? assign? expr) ; all-subx-fv + assigned-var
       ;; NOTE: it's reasonable to union assigned var, since there could be
       ;;       self assigment, say, n=n+1. For such situation, the fv is
       ;;       U{n,n} = n.
@@ -262,27 +262,27 @@
 (define (insec . args) (apply lset-intersection id-eq? args))
 (define (sym-insec . args) (apply lset-intersection eq? args))
 
-(define* (free-vars cps #:optional (refresh? #f))
+(define* (free-vars expr #:optional (refresh? #f))
   (cond
-   ((and (not refresh?) (assoc-ref (cps-attr cps) 'free-vars)) => identity)
+   ((and (not refresh?) (assoc-ref (cps-attr expr) 'free-vars)) => identity)
    (else
-    (let ((fv (vars-fold free-vars union diff cps))
-          (attr (cps-attr cps)))
+    (let ((fv (vars-fold free-vars union diff expr))
+          (attr (cps-attr expr)))
       (set! attr (cons (cons 'free-vars fv) attr))
       fv))))
 
-(define* (names cps #:optional (refresh? #f))
+(define* (names expr #:optional (refresh? #f))
   (cond
-   ((and (not refresh?) (assoc-ref (cps-attr cps) 'var-names)) => identity)
+   ((and (not refresh?) (assoc-ref (cps-attr expr) 'var-names)) => identity)
    (else
-    (let ((nv (vars-fold names union union cps))
-          (attr (cps-attr cps)))
+    (let ((nv (vars-fold names union union expr))
+          (attr (cps-attr expr)))
       (set! attr (cons (cons 'var-names nv) attr))
       nv))))
 
 ;; NOTE: free-vars <= names, so diff is enough
-(define (bound-vars cps) (apply diff (names cps) (free-vars cps)))
-(define (all-ref-vars cps) (vars-fold all-ref-vars append append cps))
+(define (bound-vars expr) (apply diff (names expr) (free-vars expr)))
+(define (all-ref-vars expr) (vars-fold all-ref-vars append append expr))
 
 ;; The all-ref-vars will count all appear variables, include the local definition,
 ;; so it has to be performed after these two steps:
@@ -292,8 +292,8 @@
 ;; cnt == 1 means it's free-var
 ;; cnt == 2 means it should be inlined
 ;; cnt > 2, leave it as it is
-(define (make-ref-table cps)
-  (let ((vl (all-ref-vars cps))
+(define (make-ref-table expr)
+  (let ((vl (all-ref-vars expr))
         (ht (make-hash-table)))
     (for-each (lambda (v)
                 (hash-set! ht v (1+ (hash-ref ht v 0))))
@@ -472,8 +472,8 @@
     ;; collection-set! collection-ref
     (else (throw 'pi-error 'ast->cps "Wrong expr: " expr))))
 
-(define* (cps->expr cps #:optional (hide-begin? #t))
-  (match cps
+(define* (cps->expr cpse #:optional (hide-begin? #t))
+  (match cpse
     (($ lambda/k _ args body)
      `(lambda (,@(map cps->expr args)) ,(cps->expr body)))
     (($ closure/k _ env body)
@@ -497,7 +497,7 @@
     (($ constant/k _ ($ constant _ val type)) val)
     (($ id _ name _) name)
     (($ primitive _ name _ _ _) name)
-    (else (throw 'pi-error 'cps->expr "Wrong cps: " cps))))
+    (else (throw 'pi-error 'cps->expr "Wrong cps: " cpse))))
 
 (define (top-level->src)
   (hash-map->list (lambda (v e) `(define ,v ,(cps->expr e))) *top-level*))

@@ -28,34 +28,34 @@
 ;; 2. lambdas that is no escaping closures, in this case we can lift the inner
 ;;    lambdas recursively.
 ;; This pass is useful to simplify the free variable analysis in codegen.
-(define (ll cps)
-  (match cps
+(define (ll expr)
+  (match expr
     (($ letfun/k ($ bind-special-form/k _ fname func body))
      (top-level-set! fname func)
      (ll func)
      (ll body))
     ((? bind-special-form/k?)
-     (bind-special-form/k-value-set! cps (ll (bind-special-form/k-value cps)))
-     (bind-special-form/k-body-set! cps (ll (bind-special-form/k-body cps)))
-     cps)
+     (bind-special-form/k-value-set! expr (ll (bind-special-form/k-value expr)))
+     (bind-special-form/k-body-set! expr (ll (bind-special-form/k-body expr)))
+     expr)
     (($ branch/k _ cnd b1 b2)
-     (branch/k-cnd-set! cps (ll cnd))
-     (branch/k-tbranch-set! cps (ll b1))
-     (branch/k-fbranch-set! cps (ll b2))
-     cps)
+     (branch/k-cnd-set! expr (ll cnd))
+     (branch/k-tbranch-set! expr (ll b1))
+     (branch/k-fbranch-set! expr (ll b2))
+     expr)
     (($ app/k _ f e)
      ;; After normalize, there's no anonymouse function as f, so we skip f here
-     (app/k-args-set! cps (ll e))
-     cps)
+     (app/k-args-set! expr (ll e))
+     expr)
     (($ lambda/k _ args body)
      (lambda/k-body-set! (ll body))
-     cps)
+     expr)
     (($ seq/k _ exprs)
-     (seq/k-exprs-set! cps (map ll exprs))
-     cps)
-    (else cps)))
+     (seq/k-exprs-set! expr (map ll exprs))
+     expr)
+    (else expr)))
 
 ;; Lambda-lifting does two things:
 ;; 1. Lifting free variables to parameters
 ;; 2. Lifting functions to higher scoping as possible
-(define-pass lambda-lifting cps (ll cps))
+(define-pass lambda-lifting expr (ll expr))

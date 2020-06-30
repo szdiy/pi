@@ -21,23 +21,23 @@
 
 ;; Eliminate all the redundant code:
 ;; 1. (begin (begin body ...)) -> (begin body ...)
-(define (elre cps)
-  (match cps
+(define (elre expr)
+  (match expr
     (($ seq/k _ (($ seq/k _ _)))
      ;; Of course we can make sure no redundant seq was introduced in the parser,
      ;; however, you have to consider if users do it in their code, such like:
      ;; (let ((...)) (begin body ...))
-     (elre (car (seq/k-exprs cps))))
+     (elre (car (seq/k-exprs expr))))
     ((? bind-special-form/k?)
-     (bind-special-form/k-value-set! cps (elre e))
-     (bind-special-form/k-body-set! cps (elre body))
-     cps)
+     (bind-special-form/k-value-set! expr (elre (bind-special-form/k-value expr)))
+     (bind-special-form/k-body-set! expr (elre (bind-special-form/k-body expr)))
+     expr)
     (($ app/k _ func args)
-     (app/k-args-set! (map elre args))
-     cps)
+     (app/k-args-set! expr (map elre args))
+     expr)
     (($ lambda/k _ _ body)
-     (lambda/k-body-set! cps (elre body))
-     cps)
-    (else cps)))
+     (lambda/k-body-set! expr (elre body))
+     expr)
+    (else expr)))
 
-(define-pass eliminate-redundant cps (elre cps))
+(define-pass eliminate-redundant expr (elre expr))

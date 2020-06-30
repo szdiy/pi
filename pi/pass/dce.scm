@@ -21,24 +21,24 @@
   #:use-module (ice-9 match))
 
 ;; FIXME: We don't have to compute free-vars redundantly
-(define (is-referenced? cps v)
-  (memq v (free-vars cps)))
+(define (is-referenced? expr v)
+  (memq v (free-vars expr)))
 
-(define (dve cps)
-  (match cps
+(define (dve expr)
+  (match expr
     (($ letcont/k ($ bind-special-form/k _ cv ($ lambda/k _ v body) cont-body))
      (cond
       ((is-referenced? body v)
-       (bind-special-form/k-value-set! cps (dve (bind-special-form/k-value cps)))
-       (bind-special-form/k-body-set! cps (dve cont-body))
-       cps)
+       (bind-special-form/k-value-set! expr (dve (bind-special-form/k-value expr)))
+       (bind-special-form/k-body-set! expr (dve cont-body))
+       expr)
       (else (dve body))))
     ((? bind-special-form/k? sf)
      (cond
       ((is-referenced? (bind-special-form/k-body sf) (bind-special-form/k-var sf))
        (bind-special-form/k-value-set! sf (dve (bind-special-form/k-value sf)))
        (bind-special-form/k-body-set! sf (dve (bind-special-form/k-body sf)))
-       cps)
+       expr)
       (else (dve (bind-special-form/k-body sf)))))
     (($ app/k _ ($ lambda/k _ v body) e)
      ;; TODO: Here we just keep the variable which is referenced in the body,
@@ -47,20 +47,20 @@
      ;;       A better way is to do it again after all optimizings.
      (cond
       ((is-referenced? body v)
-       (lambda/k-body-set! (app/k-func cps) (dve body))
-       (app/k-args-set! cps (map dve e))
-       cps)
+       (lambda/k-body-set! (app/k-func expr) (dve body))
+       (app/k-args-set! expr (map dve e))
+       expr)
       (else (dve body))))
     (($ lambda/k _ v body)
      (cond
       ((is-referenced? body v)
-       (lambda/k-body-set! cps (dve body))
-       cps)
+       (lambda/k-body-set! expr (dve body))
+       expr)
       (else (dve body))))
-    (else cps)))
+    (else expr)))
 
 ;; This includes dead-continuation and dead-variable elimination
-(define-pass dead-variable-elimination cps (dve cps))
+(define-pass dead-variable-elimination expr (dve expr))
 
 ;; NOTE: Please notice that we've converted local function binding to let-binding
 ;;       during AST building step, so the top-level function definition is the only
@@ -70,8 +70,8 @@
 
 ;; Removes a function definition if it has no applied occurrences outside
 ;; its ownbody.
-(define-pass dead-function-elimination cps
+(define-pass dead-function-elimination expr
   (let ((funcs (top-level->body-list))
-        (fv (free-vars cps)))
+        (fv (free-vars expr)))
     (for-each top-level-delete! (diff funcs fv))
-    cps))
+    expr))

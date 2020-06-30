@@ -31,8 +31,8 @@
 ;; cnt == 1 means it's free-var
 ;; cnt == 2 means it should be inlined
 ;; cnt > 2, leave it as it is
-(define (make-ref-table cps)
-  (let ((vl (all-ref-vars cps))
+(define (make-ref-table expr)
+  (let ((vl (all-ref-vars expr))
         (ht (make-hash-table)))
     (for-each (lambda (v)
                 (hash-set! ht v (1+ (hash-ref ht v 0))))
@@ -44,9 +44,9 @@
 ;; unfortunately, we don't have env in this direct CPS implementation, so it's
 ;; too hard to trace back the definition of the function.
 ;; NOTE: Must be applied after alpha-renaming.
-(define* (func-inline cps #:optional (refs (make-ref-table cps)))
+(define* (func-inline expr #:optional (refs (make-ref-table expr)))
   (define (inlineable-local-func? f) (= 2 (hash-ref refs f 0)))
-  (match cps
+  (match expr
     (($ letcont/k ($ bind-special-form/k _ _ e
                      ($ letfun/k ($ bind-special-form/k _ fname fbody _))))
      (when (inlineable-local-func? fname)
@@ -57,20 +57,20 @@
       ((and (id? e) (top-level-ref e))
        => (lambda (func-body)
             (top-level-delete! e)
-            (lambda/k-body-set! (app/k-func cps) (func-inline body refs))
-            (app/k-args-set! cps (func-inline func-body refs))
-            (beta-reduction/preserving cps)))
+            (lambda/k-body-set! (app/k-func expr) (func-inline body refs))
+            (app/k-args-set! expr (func-inline func-body refs))
+            (beta-reduction/preserving expr)))
       (else
-       (lambda/k-body-set! (app/k-func cps) (func-inline body refs))
-       cps)))
+       (lambda/k-body-set! (app/k-func expr) (func-inline body refs))
+       expr)))
     ((? bind-special-form/k?)
      (bind-special-form/k-value-set!
-      cps
-      (func-inline (bind-special-form/k-value cps) refs))
+      expr
+      (func-inline (bind-special-form/k-value expr) refs))
      (bind-special-form/k-body-set!
-      cps
-      (func-inline (bind-special-form/k-body cps) refs))
-     cps)
-    (else cps)))
+      expr
+      (func-inline (bind-special-form/k-body expr) refs))
+     expr)
+    (else expr)))
 
-(define-pass function-inline cps (func-inline cps))
+(define-pass function-inline expr (func-inline expr))

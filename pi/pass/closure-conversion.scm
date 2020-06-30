@@ -49,13 +49,13 @@
 ;;    We may do specific optimizings for tail call in the future.
 ;; 6. Different from the passes, we use CPS constructor here for taking advantage of
 ;;    type checking in record type.
-(define* (cc cps)
-  (match cps
+(define* (cc expr)
+  (match expr
     (($ lambda/k ($ cps _ kont name attr) args body)
      (let ((env (new-env args)))
        (closure-set! name env)
        (parameterize ((current-env env)
-                      (current-kont cps))
+                      (current-kont expr))
          (make-lambda/k (list kont name attr) args (cc body))))
      ;; TODO:
      ;; 1. recording the current bindings by the label to lookup table
@@ -106,7 +106,7 @@
          => (lambda (index)
               (make-fvar label index)))
         (else (throw 'pi-error cc "Undefined variable `~a'!"
-                     (id-name cps))))))
-    (else cps)))
+                     (id-name expr))))))
+    (else expr)))
 
-(define-pass closure-conversion cps (cc cps))
+(define-pass closure-conversion expr (cc expr))
