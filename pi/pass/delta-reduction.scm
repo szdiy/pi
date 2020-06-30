@@ -64,7 +64,7 @@
      expr)
     (($ app/k _ (? primitive? p) args)
      (app/k-args-set! expr (map delta args))
-     (if (and (every cps-integer? args) (not (eq? (primitive-name p) 'halt)))
+     (if (and (every cps-integer? args) (not (eq? (primitive-name p) 'return)))
          (new-constant/k (prim-apply p (app/k-args expr)))
          expr))
     (else expr)))

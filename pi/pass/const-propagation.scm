@@ -37,7 +37,7 @@
                    (cp jcont))))
       (else (fail!))))
     (($ letcont/k ($ bind-special-form/k _ jname
-                     ($ app/k _ prim:halt ((? constant/k? c)))
+                     ($ app/k _ prim:return ((? constant/k? c)))
                      (? app/k?)))
      (bind-special-form/k-value expr))
     ((? bind-special-form/k?)

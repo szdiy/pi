@@ -23,7 +23,7 @@
 (define (uc expr)
   (match expr
     (($ letcont/k ($ bind-special-form/k _ _ value
-                     ($ app/k _ prim:halt args #; ($ app/k _ _ args)
+                     ($ app/k _ prim:return args #; ($ app/k _ _ args)
                         )))
      (=> fail!)
      (display "hit!!!!!!!!!\n")

@@ -381,7 +381,7 @@
        (comp-cps cnd kont3)))
     (else (ast->cps expr cont))))
 
-(define* (ast->cps expr #:optional (cont prim:halt))
+(define* (ast->cps expr #:optional (cont prim:return))
   (match expr
     ;; FIXME: distinct value and function for the convenient of fun-inline.
     (($ closure ($ ast _ body) params _ _)
