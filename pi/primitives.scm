@@ -98,7 +98,7 @@
 
 ;; halt can associate with primitive `halt', its activity is TOS.
 (define-primitive (halt x)
-  (error 'prim:halt "It's not implemented!"))
+  x)
 
 (define-primitive (+ args ...)
   (gen-constant (+ args ...)))

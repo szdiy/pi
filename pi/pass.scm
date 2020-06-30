@@ -30,15 +30,22 @@
 
 (define-syntax-rule (run-pass cps lst ...)
   (fold (lambda (item last)
-          (cond
-           ((get-pass item)
-            => (lambda (pass)
-                 (match pass
-                   (((= get-pass pass) (? integer? cnt))
-                    (format #t "PASS 0: ~a~%" item)
-                    (fold (lambda (_ p) (pass p)) last (iota cnt)))
-                   (else
-                    (format #t "PASS 1: ~a~%" item)
-                    (pass last)))))
-           (else (throw 'pi-error 'run-pass "Invalid pass: `~a'!" 'item))))
+          (match item
+            ((name (? integer? cnt))
+             (=> fail!)
+             (format #t "PASS 0: ~a~%" name)
+             (cond
+              ((get-pass name)
+               => (lambda (pass)
+                    (fold (lambda (_ p) (pass p)) last (iota cnt))))
+              (else (fail!))))
+            (name
+             (=> fail!)
+             (format #t "PASS 1: ~a~%" item)
+             (cond
+              ((get-pass name)
+               => (lambda (pass)
+                    (pass last)))
+              (else (fail!))))
+            (else (throw 'pi-error 'run-pass "Invalid pass: `~a'!" 'item))))
         cps (list 'lst ...)))
