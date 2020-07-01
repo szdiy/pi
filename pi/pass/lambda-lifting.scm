@@ -16,6 +16,7 @@
 
 (define-module (pi pass lambda-lifting)
   #:use-module (pi env)
+  #:use-module (pi types)
   #:use-module (pi cps)
   #:use-module (pi pass)
   #:use-module (ice-9 match))
@@ -31,9 +32,14 @@
 (define (ll expr)
   (match expr
     (($ letfun/k ($ bind-special-form/k _ fname func body))
-     (top-level-set! fname func)
-     (ll func)
-     (ll body))
+     (=> fail!)
+     (cond
+      ((eq? (current-kont) 'global)
+       (fail!))
+      (else
+       (top-level-set! (id-name fname) func)
+       (ll func)
+       (ll body))))
     ((? bind-special-form/k?)
      (bind-special-form/k-value-set! expr (ll (bind-special-form/k-value expr)))
      (bind-special-form/k-body-set! expr (ll (bind-special-form/k-body expr)))
@@ -48,7 +54,7 @@
      (app/k-args-set! expr (ll e))
      expr)
     (($ lambda/k _ args body)
-     (lambda/k-body-set! (ll body))
+     (lambda/k-body-set! expr (ll body))
      expr)
     (($ seq/k _ exprs)
      (seq/k-exprs-set! expr (map ll exprs))

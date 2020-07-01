@@ -169,16 +169,11 @@
 
 (define (get-all-defs exprs)
   (let lp ((e exprs) (ret '()))
-    (when (null? e)
-      (throw 'pi-error 'get-all-defs
-             "No expressions in body in form `~a'" exprs))
-    (match (car e)
-      (('define rest ...) (lp (cdr e) (cons (car e) ret)))
-      (else
-       (if (null? (cdr e))
-           (throw 'pi-error 'get-all-defs
-                  "No expressions in body in form `~a'" exprs)
-           (values (cdr e) (reverse ret)))))))
+    (match (pk "e" e)
+      (() (values '() (reverse ret)))
+      ((('define _ ...) rest ...)
+       (lp rest (cons (car e) ret)))
+      (else (values e (reverse ret))))))
 
 ;; NOTE: Set step to 0 will get the current cnt
 (define* (new-counter #:optional (init 0))

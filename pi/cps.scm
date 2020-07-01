@@ -25,6 +25,9 @@
   #:use-module ((rnrs) #:select (define-record-type))
   #:export (cps-list?
 
+            current-env
+            current-kont
+
             cps cps?
             cps-kont cps-kont-set!
             cps-name cps-name-set!
@@ -116,6 +119,9 @@
 
 (define (cps-list? lst)
   (make-object-list-pred lst cps?))
+
+(define current-env (make-parameter *top-level*))
+(define current-kont (make-parameter prim:halt))
 
 (define-typed-record cps
   (fields
@@ -396,7 +402,7 @@
      ;; NOTE: The local function definition should be converted to let-binding
      ;;       by AST builder. So the definition that appears here are top-level.
      ;; NOTE: And the local function definition will be lifted to top-level later.
-     (top-level-set! var (ast->cps body cont))
+     (top-level-set! (pk "var" var) (ast->cps body cont))
      *pi/unspecified*)
     (($ binding ($ ast _ body) ($ ref _ var) value)
      (let* ((jname (new-id "jcont-"))
@@ -495,7 +501,7 @@
     (($ app/k _ f e)
      `(,(cps->expr f) ,@(map cps->expr e)))
     (($ constant/k _ ($ constant _ val type)) val)
-    (($ id _ name _) name)
+    ((? id? id) (id-name id))
     (($ primitive _ name _ _ _) name)
     (else (throw 'pi-error 'cps->expr "Wrong cps: " cpse))))
 

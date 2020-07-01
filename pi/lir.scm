@@ -113,6 +113,11 @@
    (label string?)
    (offset integer?)))
 
+;; Global variables are stored in a special area
+(define-typed-record insr-global (parent insr)
+  (fields
+   (offset integer?)))
+
 ;; jump if TOS is false
 (define-typed-record insr-fjump (parent insr)
   (fields
@@ -134,6 +139,10 @@
   (fields
    (env env?)
    (code insr?)))
+
+(define (get-global-offset name)
+  ;; TODO: compute the offset of the specified global var name
+  0)
 
 (define (cps->lir expr)
   (match expr
@@ -209,6 +218,7 @@
      (make-insr-local '() offset))
     (($ fvar _ label offset)
      (make-insr-free '() (id->string label) offset))
+    ((? primitive? p) (primitive-name p))
     (else (throw 'pi-error cps->lir "Invalid cps `~a'!" expr))))
 
 (define (lir->expr lexpr)
@@ -224,5 +234,8 @@
      `(local ,offset))
     (($ insr-free _ label offset)
      `(free-var ,label ,offset))
+    (($ insr-global _ ($ id _ name _))
+     (let ((offset (get-global-offset name)))
+       `(global ,offset)))
     (($ integer-object _ value) `(integer ,value))
     (else (throw 'pi-error lir->expr "Invalid lir `~a'!" lexpr))))

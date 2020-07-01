@@ -52,7 +52,7 @@
          ;; `define':
          ;; 1. In the top-level (toplevel definition).
          ;; 2. In the beginning of body (inner definition).
-         (throw 'pi-error 'parser
+         (throw 'pi-error parse-it
                 "Definition is only allowd in the top of context" expr))
         ((null? e)
          ;; R6Rs supports definition without expression, which implies to define
@@ -64,18 +64,24 @@
            (('define (? symbol? var) val)
             (make-def (parse-it val #:body-begin? #t) var))
            (('define ((? symbol? var) args ...) body ...)
-            (make-def (parse-it `(,head ,args ,@body) #:body-begin? #t) var))
+            (if (null? body)
+                (throw 'pi-error parse-it
+                       "No expressions in body in form `~a'" expr)
+                (make-def (parse-it `(,head ,args ,@body) #:body-begin? #t) var)))
            ((_ ((? symbol var) (? args-with-keys args)) body ...)
             (when (eq? head 'define)
-              (throw 'pi-error 'parser
+              (throw 'pi-error parse-it
                      "Source expression failed to match any pattern in form ~a"
                      expr))
             (make-def (parse-it `(define* ,args ,@body) #:body-begin? #t) var))
-           (else (throw 'pi-error "define: no pattern to match! `~a'" expr)))))))
+           (else (throw 'pi-error parse-it
+                        "define: no pattern to match! `~a'" expr)))))))
     (('set! id val)
      (cond
       ((symbol? id) (make-assign (parse-it val) (parse-it id)))
-      (else (throw 'pi-error (format #f "Bad `set!' special form: `~a'" expr)))))
+      (else
+       (throw 'pi-error parse-it
+              (format #f "Bad `set!' special form: `~a'" expr)))))
     (('if tst then els ...)
      (let* ((e (parse-it tst #:use 'test))
             (b1 (parse-it then #:body-begin? #t))
@@ -86,9 +92,9 @@
                    (gen-constant 'unspecified))
                   ((e) (parse-it e #:body-begin? #t))
                   ((e redundant ...)
-                   (throw 'pi-error 'parser
+                   (throw 'pi-error parse-it
                           "if: redundant expr follow the second branch! `~a'" expr))
-                  (else (throw 'pi-error 'parser
+                  (else (throw 'pi-error parse-it
                                "if: can't match any cases! `~a'" expr)))))
        (make-branch (list e b1 b2))))
     (('cond body ...)
@@ -115,7 +121,7 @@
                                #:pos 'closure-level #:body-begin? #t)
                      ids #f has-opt?)))
     (('lambda* pattern body body* ...)
-     (throw 'pi-error 'parser "Sorry but lambda* is not prepared yet!")
+     (throw 'pi-error parse-it "Sorry but lambda* is not prepared yet!")
      (let* ((ids (extract-ids pattern))
             (keys (extract-keys pattern))
             (has-opt? (or (pair? pattern) (symbol? pattern))))
@@ -124,7 +130,7 @@
                      ids keys has-opt?)))
     (('begin body ...)
      (cond
-      ((eq? pos 'closure-level)
+      ((and body-begin? (eq? pos 'closure-level))
        ;; Internal definition:
        ;; definition should be transformed to local bindings.
        (let-values (((rest defs) (get-all-defs body)))
@@ -132,7 +138,7 @@
                            (match x
                              ;; FIXME: Should be letrec*
                              (('define var expr) `(let* ((,var ,expr)) ,p))
-                             (else (throw 'pi-error 'parser
+                             (else (throw 'pi-error parse-it
                                           "Invalid local definition `~a'!" x))))
                          `(begin ,@rest) defs)
                    #:pos 'closure-level #:body-begin? #f)))
@@ -141,7 +147,7 @@
        ;; definition is top level definition.
        (let lp((next body) (p #t) (ret '()))
          (cond
-          ((null? next) (make-seq (reverse! ret)))
+          ((null? next) (make-seq (reverse ret)))
           (else
            (match (car next)
              ;; make sure inner definitions are available in a row
@@ -207,16 +213,16 @@
     ((op args ...)
      (let ((f (parse-it op #:use 'value #:op? #t)))
        (cond
-        ((not f) (throw 'pi-error 'parser "PROC `~a': unbound variable: " op))
+        ((not f) (throw 'pi-error parse-it "PROC `~a': unbound variable: " op))
         ((macro? f) ((macro-expander f) args))
         (else
          (make-call #f f (map (lambda (e) (parse-it e #:use 'value)) args))))))
     ((? symbol? k) (make-ref #f k))
     ;; NOTE: immediate check has to be the last one!!!
     ((? is-immediate? i) (gen-constant i))
-    ((? string? s) (throw 'pi-error 'parser "Sorry but string is not ready yet!"))
+    ((? string? s) (throw 'pi-error parse-it "Sorry but string is not ready yet!"))
     (else
-     (throw 'pi-error 'parser
+     (throw 'pi-error parse-it
             "source expression failed to match any pattern in form `~a'"
             expr))))
 

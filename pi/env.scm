@@ -22,6 +22,7 @@
             env?
             env-bindings env-prev
 
+            toplevel?
             top-level-ref
             top-level-set!
             top-level-delete!
@@ -48,9 +49,9 @@
    (mutable bindings)
    (mutable frees)))
 
-(define-record-type toplevel (parent env) (fields bindings))
+(define-record-type toplevel (parent env) (fields definition))
 (define (new-toplevel)
-  (make-toplevel #f #f (make-hash-table)))
+  (make-toplevel #f #f #f (make-hash-table)))
 
 (define (new-env params)
   (let ((bindings (list->queue params))
@@ -60,19 +61,19 @@
 (define *top-level* (new-toplevel))
 
 (define (top-level->body-list)
-  (hash-map->list (lambda (v _) v) (toplevel-bindings *top-level*)))
+  (hash-map->list (lambda (v _) v) (toplevel-definition *top-level*)))
 
 (define (top-level-ref k)
-  (hash-ref (toplevel-bindings *top-level*) k))
+  (hash-ref (toplevel-definition *top-level*) k))
 
 (define (top-level-set! k v)
-  (hash-set! (toplevel-bindings *top-level*) k v))
+  (hash-set! (toplevel-definition *top-level*) k v))
 
-(define (top-level-delete! k v)
-  (hash-remove! (env-bindings *top-level*) k))
+(define (top-level-delete! k)
+  (hash-remove! (toplevel-definition *top-level*) k))
 
 (define (top-level-for-each proc)
-  (hash-for-each proc (toplevel-bindings *top-level*)))
+  (hash-for-each proc (toplevel-definition *top-level*)))
 
 (define (extend-env to new)
   (env-prev-set! to new))

@@ -32,9 +32,6 @@
 (define (closure-ref label)
   (hash-ref *closure-lookup-table* label))
 
-(define current-env (make-parameter *top-level*))
-(define current-kont (make-parameter prim:halt))
-
 ;; NOTE:
 ;; 1. We only perform CC after DCE, so there's no unused binding.
 ;; 2. We distinct local bindings and free vars. Both of them are ordered in a
@@ -97,16 +94,23 @@
      (make-app/k (list kont name attr)
                  (cc f)
                  (cc e)))
-    ((? id?)
+    ((? id? id)
+     (pk "id" (id-name id))
      (let ((env (current-env))
-           (label (cps-name (current-kont))))
+           (label (cps-name (current-kont)))
+           (name (id-name id)))
        (cond
-        ((bindings-index env id) => make-lvar)
-        ((frees-index env id)
-         => (lambda (index)
-              (make-fvar label index)))
-        (else (throw 'pi-error cc "Undefined variable `~a'!"
-                     (id-name expr))))))
+        ((not (toplevel? env))
+         (cond
+          ((bindings-index env id)
+           => (lambda (offset)
+                (new-lvar id offset)))
+          ((frees-index env id)
+           => (lambda (index)
+                (new-fvar id label index)))
+          (else (throw 'pi-error cc "Undefined variable `~a'!" name))))
+        ((top-level-ref name) (pk "here") (new-gvar id))
+        (else (throw 'pi-error cc "Undefined variable `~a'!" name)))))
     (else expr)))
 
 (define-pass closure-conversion expr (cc expr))

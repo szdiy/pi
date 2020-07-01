@@ -49,11 +49,18 @@
 
             lvar lvar?
             make-lvar
+            new-lvar
             lvar-offset
 
             fvar fvar?
             make-fvar
-            lvar-offset))
+            new-fvar
+            lvar-offset
+
+            gvar gvar?
+            make-gvar
+            new-gvar
+            gvar-offset))
 
 (define-record-type constant (fields val type))
 
@@ -162,12 +169,20 @@
   (make-object-list-pred lst id?))
 
 ;; local variable
-(define-typed-record lvar
+(define-typed-record lvar (parent id)
   (fields
    (offset positive?)))
+(define (new-lvar id offset)
+  (make-lvar (list (id-name id) (id-orig id)) offset))
 
 ;; free variable
-(define-typed-record fvar
+(define-typed-record fvar (parent id)
   (fields
    (label string?)
    (offset positive?)))
+(define (new-fvar id label offset)
+  (make-fvar (list (id-name id) (id-orig id)) label offset))
+
+(define-typed-record gvar (parent id))
+(define (new-gvar id)
+  (make-gvar (id-name id) (id-orig id)))

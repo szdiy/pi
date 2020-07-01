@@ -40,13 +40,13 @@
      ((eof-object? (peek-char port)) (reverse! ret))
      (else (lp (cons (read port) ret))))))
 
-(define (optimize cps)
-  (define (do-optimize cps)
+(define (optimize cexpr)
+  (define (do-optimize cexpr)
     (run-pass
-     cps
+     cexpr
      normalize
-     function-inline
-     dead-function-elimination
+     ;;function-inline
+     ;;dead-function-elimination
      fold-constant
      (constant-propagation 2)
      useless-cont
@@ -58,8 +58,10 @@
      lambda-lifting))
   (display "optimize\n")
   (init-optimizations)
-  (top-level-for-each do-optimize)
-  (do-optimize cps))
+  (parameterize ((current-kont 'global))
+    ;; Prevent redundant lifting for global functions in lambda-lifting
+    (top-level-for-each (lambda (_ e) (do-optimize e))))
+  (do-optimize cexpr))
 
 (define (compile filename)
   (define outfile (gen-outfile filename))
@@ -69,7 +71,7 @@
     (delete-file outfile))
   (let* ((exprs (call-with-input-file filename reader))
          (ast (map parser exprs))
-         (cps (ast->cps ast))
-         (cooked (optimize cps))
+         (cexpr (ast->cps ast))
+         (cooked (optimize cexpr))
          (lir (cps->lir cooked)))
     (codegen lir outfile)))
