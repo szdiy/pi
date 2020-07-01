@@ -69,12 +69,16 @@
 ;;    lookup by offset.
 ;; 5. The inner defined functions are all sorted as closures.
 ;; 6. The procedure must be defined in toplevel.
+;; 7. No recursive, the CPS tree is converted to flat instruction queue by invoking order.
 ;;
 ;;
 ;; The optimizings in LIR:
 ;; 1. Integer unboxing
 ;;    TODO: The independent const integer can be unboxed from object struct,
 ;;          however, we have to substitute all the references of that const integer.
+;; 2. Memory layout optimizing
+;; 3. Stackwise optimizing
+;; 4. Collection/struct access optimizing
 
 
 (define-record-type insr)
@@ -126,7 +130,7 @@
 (define-typed-record insr-prim (parent insr)
   (fields
    (op primitive?)
-   (args list?)))
+   (num integer?)))
 
 ;; application
 (define-typed-record insr-app (parent insr)
@@ -209,8 +213,18 @@
      ;; NOTE: After normalize, the func never be anonymous function, it must be an id.
      (let ((e (map cps->lir args)))
        (cond
-        ((primitive? func) (make-insr-prim '() func e))
-        ((id? func) (make-insr-app '() func e))
+        ((primitive? func)
+         (make-insr-label
+          '()
+          name
+          (make-insr-prim func (primitive->number func))
+          ,@(map cps->lir args)))
+        ((id? func)
+         (make-insr-label
+          '()
+          name
+          (make-insr-proc (id-name func))
+          ,@(map cps->lir args)))
         (else (throw 'pi-error cps->lir "Invalid func `~a'!" func)))))
     (($ constant/k _ value)
      (create-object value))
@@ -218,7 +232,8 @@
      (make-insr-local '() offset))
     (($ fvar _ label offset)
      (make-insr-free '() (id->string label) offset))
-    ((? primitive? p) (primitive-name p))
+    ((? primitive? p)
+     (make-insr-prim p (primitive->number p)))
     (else (throw 'pi-error cps->lir "Invalid cps `~a'!" expr))))
 
 (define (lir->expr lexpr)
@@ -228,8 +243,8 @@
     (($ insr-label _ label exprs)
      `((label ,label)
        ,@(map lir->expr exprs)))
-    (($ insr-prim _ p args)
-     `(prim-call ,(primitive-name p) ,@(map lir->expr args)))
+    (($ insr-prim _ p num)
+     `(prim-call ,(primitive-name p) ,num))
     (($ insr-local _ offset)
      `(local ,offset))
     (($ insr-free _ label offset)
