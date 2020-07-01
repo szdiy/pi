@@ -56,7 +56,11 @@
      (cond
       ((and (id? e) (top-level-ref e))
        => (lambda (func-body)
-            (top-level-delete! e)
+            (when (not (eq? (current-kont) 'global))
+              ;; It's too early to delete in toplevel optimizing
+              (pk "remove!")
+              (top-level-delete! e))
+            (pk "here!!!!!!!!!!!!")
             (lambda/k-body-set! (app/k-func expr) (func-inline body refs))
             (app/k-args-set! expr (func-inline func-body refs))
             (beta-reduction/preserving expr)))

@@ -45,8 +45,8 @@
     (run-pass
      cexpr
      normalize
-     ;;function-inline
-     ;;dead-function-elimination
+     function-inline
+     dead-function-elimination
      fold-constant
      (constant-propagation 2)
      useless-cont
@@ -59,7 +59,7 @@
   (display "optimize\n")
   (init-optimizations)
   (parameterize ((current-kont 'global))
-    ;; Prevent redundant lifting for global functions in lambda-lifting
+    ;; Prevent unecessary lifting and inline for global functions
     (top-level-for-each (lambda (_ e) (do-optimize e))))
   (do-optimize cexpr))
 

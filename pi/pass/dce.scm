@@ -73,5 +73,7 @@
 (define-pass dead-function-elimination expr
   (let ((funcs (top-level->body-list))
         (fv (free-vars expr)))
-    (for-each top-level-delete! (diff funcs fv))
+    (when (not (eq? (pk "kont"(current-kont)) 'global))
+      (pk "remove!!!!!!!!!")
+      (for-each top-level-delete! (diff funcs fv)))
     expr))
