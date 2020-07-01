@@ -83,18 +83,19 @@
 
 (define-record-type insr)
 
-(define (insr-list? lst)
-  (make-object-list-pred lst insr?))
+(define (valid-insr-list? lst)
+  (make-object-list-pred lst (lambda (x) (or (insr? x) (object? x)))))
 
 (define-typed-record insr-proc (parent insr)
   (fields
-   (entry id?) ; entry should be a label
-   (env env?)))
+   (entry string?) ; entry should be a label
+   (env env?)
+   (nargs integer?)))
 
 (define-typed-record insr-label (parent insr)
   (fields
-   (label symbol?)
-   (body insr-list?)))
+   (label string?)
+   (body valid-insr-list?)))
 
 (define-record-type insr-lit (parent insr) (fields val)) ; literal
 (define-record-type insr-set (parent insr) (fields var)) ; var assignment
@@ -127,10 +128,18 @@
   (fields
    (label string?)))
 
+;; This is for passing arguments
 (define-typed-record insr-prim (parent insr)
   (fields
    (op primitive?)
    (num integer?)))
+
+;; This is for primitive calling
+(define-typed-record insr-pcall (parent insr)
+  (fields
+   (op primitive?)
+   (num integer?)
+   (nargs integer?)))
 
 ;; application
 (define-typed-record insr-app (parent insr)
@@ -151,21 +160,23 @@
 (define (cps->lir expr)
   (match expr
     (($ lambda/k ($ cps _ kont name attr) args body)
-     (let ((env (closure-ref name)))
+     (let ((env (closure-ref name))
+           (label (id->string name)))
        (when (not env)
          (throw 'pi-error cps->lir
-                "BUG: the closure label `~a' doesn't have an env!" name))
-       (make-insr-proc '() name env)))
+                "lambda/k: the closure label `~a' doesn't have an env!" label))
+       (make-insr-proc '() label env)))
     #;
     (($ closure/k ($ cps _ kont name attr) env body) ;
     )
     (($ branch/k ($ cps _ kont name attr) cnd b1 b2)
      (let ((ce (cps->lir cnd))
            (bt (cps->lir b1))
-           (bf (cps->lir b2)))
+           (bf (cps->lir b2))
+           (label (id->string name)))
        (make-insr-label
         '()
-        name
+        label
         (list
          (make-insr-push ce)
          (make-insr-fjump (cps-name bf))
@@ -176,7 +187,7 @@
     (($ collection/k ($ cps _ kont name attr) var type size value body) ; ;
     )
     (($ seq/k ($ cps _ kont name attr) exprs)
-     (make-insr-label '() name (map cps->lir exprs)))
+     (make-insr-label '() (id->string name) (map cps->lir exprs)))
     (($ letfun/k ($ bind-special-form/k ($ cps _ kont name attr) fname fun body))
      ;; NOTE:
      ;; 1. For common function, after lambda-lifting, the function must be lifted to a
@@ -187,8 +198,8 @@
             (cont (cps->lir body))
             (insr (make-insr-label label (cps->lir fun))))
        (cond
-        ((insr? cont) (make-insr-label '() name (list insr cont)))
-        ((list? cont) (make-insr-label '() name `(,insr ,@cont)))
+        ((insr? cont) (make-insr-label '() label (list insr cont)))
+        ((list? cont) (make-insr-label '() label `(,insr ,@cont)))
         (else (throw 'pi-error cps->lir "Invalid cont `~a' in letfun/k!" cont)))
        ;; TODO:
        ;; Don't forget this is based on lambda-lifting that we haven't done.
@@ -203,28 +214,34 @@
      ;; NOTE: value is constant type.
      ;; NOTE: char and boolean shouldn't be unboxed.
      (let ((obj (create-object value))
-           (cont (cps->lir body)))
+           (cont (cps->lir body))
+           (label (id->string name)))
        ;; TODO: substitute all the var reference to the ref-number
        (cond
-        ((insr? cont) (make-insr-label '() name (list obj cont)))
-        ((list? cont) (make-insr-label '() name `(,obj ,@cont)))
+        ((insr? cont) (make-insr-label '() label (list obj cont)))
+        ((list? cont) (make-insr-label '() label `(,obj ,@cont)))
         (else (throw 'pi-error cps->lir "Invalid cont `~a' in letval/k!" cont)))))
     (($ app/k ($ cps _ kont name attr) func args)
      ;; NOTE: After normalize, the func never be anonymous function, it must be an id.
-     (let ((e (map cps->lir args)))
+     (let ((e (map cps->lir args))
+           (env (closure-ref name))
+           (label (id->string name)))
+       (when (not env)
+         (throw 'pi-error cps->lir
+                "app/k: the closure label `~a' doesn't have an env!" label))
        (cond
         ((primitive? func)
          (make-insr-label
           '()
-          name
-          (make-insr-prim func (primitive->number func))
-          ,@(map cps->lir args)))
+          label
+          `(,(make-insr-pcall '() func (primitive->number func) (length args))
+            ,@(map cps->lir args))))
         ((id? func)
          (make-insr-label
           '()
-          name
-          (make-insr-proc (id-name func))
-          ,@(map cps->lir args)))
+          label
+          `(,(make-insr-proc '() label env (length args))
+            ,@(map cps->lir args))))
         (else (throw 'pi-error cps->lir "Invalid func `~a'!" func)))))
     (($ constant/k _ value)
      (create-object value))
@@ -233,18 +250,20 @@
     (($ fvar _ label offset)
      (make-insr-free '() (id->string label) offset))
     ((? primitive? p)
-     (make-insr-prim p (primitive->number p)))
+     (make-insr-prim '() p (primitive->number p)))
     (else (throw 'pi-error cps->lir "Invalid cps `~a'!" expr))))
 
 (define (lir->expr lexpr)
   (match lexpr
-    (($ insr-proc _ label _)
-     `(proc ,label))
+    (($ insr-proc _ label _ nargs)
+     `(proc ,label ,nargs))
     (($ insr-label _ label exprs)
      `((label ,label)
        ,@(map lir->expr exprs)))
     (($ insr-prim _ p num)
-     `(prim-call ,(primitive-name p) ,num))
+     `(primitive ,(primitive-name p) ,num))
+    (($ insr-pcall _ p num nargs)
+     `(prim-call ,(primitive-name p) ,num ,nargs))
     (($ insr-local _ offset)
      `(local ,offset))
     (($ insr-free _ label offset)

@@ -19,6 +19,7 @@
   #:use-module (pi sasm)
   #:use-module (pi types)
   #:use-module (ice-9 match)
+  #:use-module (ice-9 pretty-print)
   #:use-module ((rnrs) #:select (define-record-type))
   #:export (symbol->primitive
             is-op-a-primitive?
@@ -32,6 +33,7 @@
             primitive-impl
             define-primitive
             primitive->number
+            print-primitives
 
             special-form
             make-special-form:if
@@ -84,15 +86,18 @@
 ;; Of course, we can record the primitive number when defining the primitive with
 ;; a macro. However, an explicit lookup table is useful for debug.
 (define *prim-table*
-  '((halt . 0)
-    (+ . 1)
-    (- . 2)
-    (* . 3)
-    (/ . 4)))
+  '(halt return + - * /))
+
+(define (print-primitives)
+  (display "--------PRIMITIVES--------\n")
+  (pretty-print
+   (map cons *prim-table* (iota (length *prim-table*))))
+  (display "--------END--------\n"))
 
 (define (primitive->number p)
+  (define (gen-num ll) (- (length *prim-table*) (length ll)))
   (cond
-   ((assoc-ref *prim-table* (primitive-name p)) => identity)
+   ((memq (primitive-name p) *prim-table*) => gen-num)
    (else (throw 'pi-error primitive->number "Invalid primitive name `~a'!"
                 (primitive-name p)))))
 

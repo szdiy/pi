@@ -30,7 +30,8 @@
 (define (closure-set! label bindings)
   (hash-set! *closure-lookup-table* label bindings))
 (define (closure-ref label)
-  (hash-ref *closure-lookup-table* label))
+  ;; FIXME: Shouldn't create new env
+  (hash-ref *closure-lookup-table* label (new-env '())))
 
 ;; NOTE:
 ;; 1. We only perform CC after DCE, so there's no unused binding.
@@ -95,7 +96,6 @@
                  (cc f)
                  (cc e)))
     ((? id? id)
-     (pk "id" (id-name id))
      (let ((env (current-env))
            (label (cps-name (current-kont)))
            (name (id-name id)))
@@ -109,7 +109,7 @@
            => (lambda (index)
                 (new-fvar id label index)))
           (else (throw 'pi-error cc "Undefined variable `~a'!" name))))
-        ((top-level-ref name) (pk "here") (new-gvar id))
+        ((top-level-ref name)  (new-gvar id))
         (else (throw 'pi-error cc "Undefined variable `~a'!" name)))))
     (else expr)))
 

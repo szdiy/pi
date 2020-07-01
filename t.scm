@@ -1,6 +1,7 @@
 (use-modules (pi parser)
              (pi cps)
              (pi lir)
+             (pi primitives)
              (pi pass normalize)
              (ice-9 pretty-print))
 
@@ -26,6 +27,7 @@
 ;;(pretty-print (cps->expr c))
 (define o ((@@ (pi compile) optimize) c))
 (pretty-print (cps->expr o))
+(print-primitives)
 (define l (cps->lir o))
 (display "LIR:\n")
 (pretty-print (lir->expr l))
