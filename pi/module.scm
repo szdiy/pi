@@ -27,7 +27,8 @@
 
             read-as-mod))
 
-;; TODO: replace top-level with mod-env
+;; TODO: Support r7rs modules
+;; TODO: Replace top-level with mod-env
 (define-typed-record mod
   (fields
    (filename string?)
