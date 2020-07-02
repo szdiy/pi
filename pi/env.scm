@@ -53,7 +53,7 @@
 (define (new-toplevel)
   (make-toplevel #f #f #f (make-hash-table)))
 
-(define (new-env params)
+(define* (new-env #:optional (params '()))
   (let ((bindings (list->queue params))
         (frees (new-queue)))
     (make-env #f bindings frees)))

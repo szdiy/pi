@@ -16,6 +16,7 @@
 
 (define-module (pi compile)
   #:use-module (pi utils)
+  #:use-module (pi module)
   #:use-module (pi env)
   #:use-module (pi parser)
   #:use-module (pi pass)
@@ -33,12 +34,6 @@
    (map (lambda (s) `((pi pass ,(string->symbol (file-basename s)))))
         (scandir (string-append (dirname (current-filename)) "/pass")
                  (lambda (s) (string-match "\\.scm" s))))))
-
-(define (reader port)
-  (let lp((ret '()))
-    (cond
-     ((eof-object? (peek-char port)) (reverse! ret))
-     (else (lp (cons (read port) ret))))))
 
 (define (optimize cexpr)
   (define (do-optimize cexpr)
@@ -69,7 +64,8 @@
     (error "File doens't exist!" filename))
   (when (file-exists? outfile)
     (delete-file outfile))
-  (let* ((exprs (call-with-input-file filename reader))
+  (let* ((mod (read-as-mod filename))
+         (exprs (mod-exprs mod))
          (ast (map parser exprs))
          (cexpr (ast->cps ast))
          (cooked (optimize cexpr))

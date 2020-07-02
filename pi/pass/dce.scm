@@ -71,9 +71,10 @@
 ;; Removes a function definition if it has no applied occurrences outside
 ;; its ownbody.
 (define-pass dead-function-elimination expr
-  (let ((funcs (top-level->body-list))
-        (fv (free-vars expr)))
-    (when (not (eq? (pk "kont"(current-kont)) 'global))
-      (pk "remove!!!!!!!!!")
-      (for-each top-level-delete! (diff funcs fv)))
-    expr))
+  (cond
+   ((not (eq? (current-kont) 'global))
+    (let ((funcs (top-level->body-list))
+          (fv (free-vars expr)))
+      (for-each top-level-delete! (insec funcs fv))
+      expr))
+   (else expr)))
