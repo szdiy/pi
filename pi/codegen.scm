@@ -24,11 +24,22 @@
   #:use-module (ice-9 match)
   #:use-module (ice-9 format)
   #:export (codegen
-            cps->sasm))
+            lir->sasm))
+
+(define (gen-binding-frame env)
+  (let lp ((next (env-bindings bindings)) (ret '()))
+    (match next
+      (() (reverse ret))
+      (((? id? id) rest ...)
+       (lp (cdr next) (cons (bindings-index env id))))
+      (else (lp cdr next) ret))))
 
 ;; lir -> unspecified
 (define (emit-sasm lir)
   (match lir
+    (($ insr-proc _ label _ _ body)
+     `((label ,label)
+       ,@(emit-sasm body)))
     (($ insr-app _ label args)
      (for-each emit-sasm args)
      (emit-call-proc (length args) label))

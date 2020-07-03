@@ -27,6 +27,12 @@
   #:export (make-insr
             insr?
 
+            insr-proc make-insr-proc
+            insr-proc-label
+            insr-proc-env
+            insr-proc-nargs
+            insr-proc-body
+
             insr-lit make-insr-lit
             insr-lit-val
 
@@ -90,7 +96,8 @@
   (fields
    (entry string?) ; entry should be a label
    (env env?)
-   (nargs integer?)))
+   (nargs integer?)
+   (body valid-insr-list?)))
 
 (define-typed-record insr-label (parent insr)
   (fields
@@ -165,7 +172,7 @@
        (when (not env)
          (throw 'pi-error cps->lir
                 "lambda/k: the closure label `~a' doesn't have an env!" label))
-       (make-insr-proc '() label env)))
+       (make-insr-proc '() label env (length args) (cps->lir body))))
     #;
     (($ closure/k ($ cps _ kont name attr) env body) ;
     )
@@ -240,7 +247,7 @@
          (make-insr-label
           '()
           label
-          `(,(make-insr-proc '() label env (length args))
+          `(,(make-insr-call '() label args)
             ,@(map cps->lir args))))
         (else (throw 'pi-error cps->lir "Invalid func `~a'!" func)))))
     (($ constant/k _ value)
