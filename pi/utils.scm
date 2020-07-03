@@ -83,7 +83,7 @@
 
 (define (slot-index s/q pred)
   (let ((slots (car s/q)))
-    (any (lambda (x i) (and (pred x) i)) slots (iota slots))))
+    (any (lambda (x i) (and (pred x) i)) slots (iota (length slots)))))
 
 (define stack-pop! q-pop!)
 (define stack-push! q-push!)

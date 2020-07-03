@@ -147,7 +147,7 @@
    ;; For example, the orig of x-123 is x
    (orig symbol?)))
 
-(define* (new-id #:optional (orig "x-") (rename? #t))
+(define* (new-id #:optional (orig "#x-") (rename? #t))
   (let* ((orig-fix (cond
                     ((string? orig) (string->symbol orig))
                     ((symbol? orig) orig)
@@ -171,7 +171,7 @@
 ;; local variable
 (define-typed-record lvar (parent id)
   (fields
-   (offset positive?)))
+   (offset positive? zero?)))
 (define (new-lvar id offset)
   (make-lvar (list (id-name id) (id-orig id)) offset))
 
@@ -179,7 +179,7 @@
 (define-typed-record fvar (parent id)
   (fields
    (label string?)
-   (offset positive?)))
+   (offset positive? zero?)))
 (define (new-fvar id label offset)
   (make-fvar (list (id-name id) (id-orig id)) label offset))
 

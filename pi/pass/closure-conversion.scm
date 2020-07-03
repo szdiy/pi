@@ -77,10 +77,14 @@
     (($ seq/k ($ cps _ kont name attr) exprs)
      (make-seq/k (list kont name attr) (map cc exprs)))
     (($ letfun/k ($ bind-special-form/k ($ cps _ kont name attr) fname func body))
-     (make-letfun/k (list kont name attr)
-                    fname
-                    (cc func)
-                    (cc body)))
+     (let ((env (new-env (list fname))))
+       (closure-set! name env)
+       (parameterize ((current-env env)
+                      (current-kont expr))
+         (make-letfun/k (list kont name attr)
+                        fname
+                        (cc func)
+                        (cc body)))))
     (($ letcont/k ($ bind-special-form/k ($ cps _ kont name attr) jname jcont body))
      (make-letcont/k (list kont name attr)
                      jname
@@ -91,14 +95,17 @@
                     var
                     (cc value)
                     (cc body)))
-    (($ app/k ($ cps _ kont name attr) f e)
+    (($ app/k ($ cps _ kont name attr) f args)
      (make-app/k (list kont name attr)
                  (cc f)
-                 (cc e)))
+                 #;(map cc args)
+                 (cc args)
+                 ))
     ((? id? id)
      (let ((env (current-env))
            (label (cps-name (current-kont)))
-           (name (id-name id)))
+           (name (pk "cc name"(id-name id))))
+       ;;(pk "bindings" (map id-name (car (env-bindings env))))
        (cond
         ((not (toplevel? env))
          (cond

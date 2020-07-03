@@ -45,8 +45,8 @@
             insr-prim make-insr-prim
             insr-prim-op insr-prim-args
 
-            insr-app make-insr-app
-            insr-app-label insr-app-args
+            insr-call make-insr-call
+            insr-call-label insr-call-args
 
             insr-fjump
             make-insr-fjump
@@ -57,6 +57,7 @@
             insr-label make-insr-label
             insr-label-label insr-label-body
 
+            label-ref
             cps->lir
             lir->expr))
 
@@ -149,10 +150,10 @@
    (nargs integer?)))
 
 ;; application
-(define-typed-record insr-app (parent insr)
+(define-typed-record insr-call (parent insr)
   (fields
    (label string?)
-   (args list?)))
+   (nargs integer?)))
 
 ;; closure
 (define-typed-record insr-closure (parent insr)
@@ -163,6 +164,12 @@
 (define (get-global-offset name)
   ;; TODO: compute the offset of the specified global var name
   0)
+
+(define *labels* (make-hash-table))
+(define (label-register! label lexpr)
+  (hash-set! *labels* label lexpr))
+(define (label-ref label)
+  (hash-ref *labels* label))
 
 (define (cps->lir expr)
   (match expr
@@ -201,12 +208,14 @@
      ;;    function which can be looked up from top-level.
      ;; 2. For escaping function, there must be a closure. So we will take advantage
      ;;    of the specific instruction of the VM.
-     (let* ((label (id->string fname))
+     (let* ((label (id->string name))
             (cont (cps->lir body))
             (insr (make-insr-label label (cps->lir fun))))
        (cond
-        ((insr? cont) (make-insr-label '() label (list insr cont)))
-        ((list? cont) (make-insr-label '() label `(,insr ,@cont)))
+        ((insr? cont)
+         (label-register! label (make-insr-label '() label (list insr cont))))
+        ((list? cont)
+         (label-register! label (make-insr-label '() label `(,insr ,@cont))))
         (else (throw 'pi-error cps->lir "Invalid cont `~a' in letfun/k!" cont)))
        ;; TODO:
        ;; Don't forget this is based on lambda-lifting that we haven't done.
@@ -225,40 +234,38 @@
            (label (id->string name)))
        ;; TODO: substitute all the var reference to the ref-number
        (cond
-        ((insr? cont) (make-insr-label '() label (list obj cont)))
-        ((list? cont) (make-insr-label '() label `(,obj ,@cont)))
+        ((insr? cont)
+         (label-register! label (make-insr-label '() label (list obj cont))))
+        ((list? cont)
+         (label-register! label (make-insr-label '() label `(,obj ,@cont))))
         (else (throw 'pi-error cps->lir "Invalid cont `~a' in letval/k!" cont)))))
     (($ app/k ($ cps _ kont name attr) func args)
      ;; NOTE: After normalize, the func never be anonymous function, it must be an id.
-     (let ((e (map cps->lir args))
+     (let ((f (cps->lir func))
+           (e (map cps->lir args))
            (env (closure-ref name))
            (label (id->string name)))
        (when (not env)
          (throw 'pi-error cps->lir
                 "app/k: the closure label `~a' doesn't have an env!" label))
-       (cond
-        ((primitive? func)
-         (make-insr-label
-          '()
-          label
-          `(,(make-insr-pcall '() func (primitive->number func) (length args))
-            ,@(map cps->lir args))))
-        ((id? func)
-         (make-insr-label
-          '()
-          label
-          `(,(make-insr-call '() label args)
-            ,@(map cps->lir args))))
-        (else (throw 'pi-error cps->lir "Invalid func `~a'!" func)))))
+       (make-insr-label
+        '()
+        label
+        `(,f ,@e))))
     (($ constant/k _ value)
      (create-object value))
     (($ lvar _ offset)
      (make-insr-local '() offset))
     (($ fvar _ label offset)
      (make-insr-free '() (id->string label) offset))
+    (($ gvar ($ id _ name _))
+     (let ((v (top-level-ref name)))
+       (when (not v)
+         (throw 'pi-error cps->lir "Invalid global var `~a'!" name))
+       (cps->lir (pk "v" v))))
     ((? primitive? p)
      (make-insr-prim '() p (primitive->number p)))
-    (else (throw 'pi-error cps->lir "Invalid cps `~a'!" expr))))
+    (else (throw 'pi-error cps->lir "Invalid cps `~a'!" (id-name expr)))))
 
 (define (lir->expr lexpr)
   (match lexpr
@@ -271,6 +278,8 @@
      `(primitive ,(primitive-name p) ,num))
     (($ insr-pcall _ p num nargs)
      `(prim-call ,(primitive-name p) ,num ,nargs))
+    (($ insr-call _ label argc)
+     `(call ,label ,argc))
     (($ insr-local _ offset)
      `(local ,offset))
     (($ insr-free _ label offset)

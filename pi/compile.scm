@@ -68,6 +68,9 @@
          (exprs (mod-exprs mod))
          (ast (map parser exprs))
          (cexpr (ast->cps ast))
-         (cooked (optimize cexpr))
-         (lir (cps->lir cooked)))
-    (codegen lir outfile)))
+         (cooked (optimize cexpr)))
+    (parameterize ((current-kont 'global))
+      (top-level-for-each
+       (lambda (v e)
+         (top-level-set! v (cps->lir e)))))
+    (codegen (cps->lir cooked) outfile)))
