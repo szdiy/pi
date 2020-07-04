@@ -308,19 +308,23 @@
 
 ;; cps -> symbol-list -> id-list
 (define (alpha-renaming expr old new)
-  (define (rename e)
+  (define (rename eid)
     (cond
-     ((list-index (lambda (x) (id-eq? x e)) old)
+     ((list-index (lambda (sym) (eq? sym (id-name eid))) old)
       => (lambda (i) (list-ref new i)))
-     (else e)))
+     (else eid)))
   (match expr
     (($ lambda/k _ fargs body)
-     (cond
-      ((null? (sym-insec fargs old))
-       (lambda/k-body-set! expr (alpha-renaming body old new))
-       expr)
-      ;; new binding, don't rename more deeply anymore
-      (else expr)))
+     (lambda/k-body-set! expr (alpha-renaming body old new))
+     expr
+     ;; (cond
+     ;;  ((null? (pk "ins"(sym-insec (pk "fargs"(map id-name fargs)) (pk "old" old))))
+     ;;   (display "hit!!!!!!\n")
+     ;;   (lambda/k-body-set! expr (alpha-renaming body old new))
+     ;;   expr)
+     ;;  ;; new binding, don't apply rename more deeply
+     ;;  (else expr))
+     )
     (($ app/k _ f e)
      ;;(format #t "alpha 1 ~a~%" expr)
      (app/k-func-set! expr (alpha-renaming f old new))
@@ -393,7 +397,7 @@
     (($ closure ($ ast _ body) params _ _)
      (let* ((fname (new-id "#func-"))
             (fk (new-id "#kont-"))
-            (nv (map new-id params))
+            (nv (map new-id (pk "params" params)))
             (fun (alpha-renaming
                   (new-lambda/k nv (ast->cps body fk) #:name fk)
                   params nv)))

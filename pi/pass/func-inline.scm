@@ -75,6 +75,9 @@
       expr
       (func-inline (bind-special-form/k-body expr) refs))
      expr)
+    (($ lambda/k _ args body)
+     (lambda/k-body-set! expr (func-inline body))
+     expr)
     (else expr)))
 
 (define-pass function-inline expr (func-inline expr))
