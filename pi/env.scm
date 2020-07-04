@@ -29,7 +29,7 @@
             top-level-for-each
             top-level->body-list
 
-            extend-env
+            extend-env!
             bindings-index
             frees-index
             binding-exists?
@@ -75,7 +75,7 @@
 (define (top-level-for-each proc)
   (hash-for-each proc (toplevel-definition *top-level*)))
 
-(define (extend-env to new)
+(define (extend-env! to new)
   (env-prev-set! to new))
 
 (define (id-index env ref id)

@@ -33,7 +33,7 @@
           (match item
             ((name (? integer? cnt))
              (=> fail!)
-             ;;(format #t "PASS 0: ~a~%" name)
+             (format #t "PASS 0: ~a~%" name)
              (cond
               ((get-pass name)
                => (lambda (pass)
@@ -41,7 +41,7 @@
               (else (fail!))))
             (name
              (=> fail!)
-             ;;(format #t "PASS 1: ~a~%" item)
+             (format #t "PASS 1: ~a~%" item)
              (cond
               ((get-pass name)
                => (lambda (pass)

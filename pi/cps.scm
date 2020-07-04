@@ -315,16 +315,12 @@
      (else eid)))
   (match expr
     (($ lambda/k _ fargs body)
-     (lambda/k-body-set! expr (alpha-renaming body old new))
-     expr
-     ;; (cond
-     ;;  ((null? (pk "ins"(sym-insec (pk "fargs"(map id-name fargs)) (pk "old" old))))
-     ;;   (display "hit!!!!!!\n")
-     ;;   (lambda/k-body-set! expr (alpha-renaming body old new))
-     ;;   expr)
-     ;;  ;; new binding, don't apply rename more deeply
-     ;;  (else expr))
-     )
+     (cond
+      ((null? (sym-insec (map id-name fargs) old))
+       (lambda/k-body-set! expr (alpha-renaming body old new))
+       expr)
+      ;; new binding, don't apply rename more deeply
+      (else expr)))
     (($ app/k _ f e)
      ;;(format #t "alpha 1 ~a~%" expr)
      (app/k-func-set! expr (alpha-renaming f old new))

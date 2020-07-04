@@ -100,6 +100,9 @@
       (cfs (beta-reduction body)
            params
            (beta-reduction args))))
+    (($ app/k _ f args)
+     (app/k-args-set! expr (map beta-reduction args))
+     expr)
     (($ lambda/k _ args body)
      ;;(display "beta 2\n")
      (lambda/k-body-set! expr (beta-reduction body))
@@ -128,6 +131,9 @@
       (cfs (beta-reduction/preserving body)
            params
            (beta-reduction/preserving args))))
+    (($ app/k _ f args)
+     (app/k-args-set! expr (map beta-reduction/preserving args))
+     expr)
     (($ lambda/k _ args body)
      ;;(display "beta 2\n")
      (lambda/k-body-set! expr (beta-reduction/preserving body))
