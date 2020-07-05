@@ -16,7 +16,9 @@
 
 (define-module (pi pass)
   #:use-module (pi utils)
+  #:use-module (pi cps)
   #:use-module (ice-9 match)
+  #:use-module (ice-9 pretty-print)
   #:export (define-pass
              run-pass))
 
@@ -28,24 +30,28 @@
     (define (name cps) body ...)
     (hash-set! *pass-table* 'name name)))
 
-(define-syntax-rule (run-pass cps lst ...)
+(define-syntax-rule (run-pass expr lst ...)
   (fold (lambda (item last)
-          (match item
-            ((name (? integer? cnt))
-             (=> fail!)
-             (format #t "PASS 0: ~a~%" name)
-             (cond
-              ((get-pass name)
-               => (lambda (pass)
-                    (fold (lambda (_ p) (pass p)) last (iota cnt))))
-              (else (fail!))))
-            (name
-             (=> fail!)
-             (format #t "PASS 1: ~a~%" item)
-             (cond
-              ((get-pass name)
-               => (lambda (pass)
-                    (pass last)))
-              (else (fail!))))
-            (else (throw 'pi-error 'run-pass "Invalid pass: `~a'!" 'item))))
-        cps (list 'lst ...)))
+          (let ((e
+                 (match item
+                   ((name (? integer? cnt))
+                    (=> fail!)
+                    (format #t "PASS 0: ~a~%" name)
+                    (cond
+                     ((get-pass name)
+                      => (lambda (pass)
+                           (fold (lambda (_ p) (pass p)) last (iota cnt))))
+                     (else (fail!))))
+                   (name
+                    (=> fail!)
+                    (format #t "PASS 1: ~a~%" item)
+                    (cond
+                     ((get-pass name)
+                      => (lambda (pass)
+                           (pass last)))
+                     (else (fail!))))
+                   (else (throw 'pi-error 'run-pass "Invalid pass: `~a'!" 'item)))))
+            (pk "item"(object->string item))
+            (pretty-print (cps->expr e))
+            e))
+        expr (list 'lst ...)))

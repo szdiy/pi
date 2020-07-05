@@ -36,6 +36,7 @@
 
             *top-level*
             new-env
+            env-local-push!
             env->args))
 
 ;; NOTE:
@@ -96,6 +97,16 @@
     (or (and bindings (slot-index bindings id))
         (and prev (binding-exists? prev id))
         (top-level-ref id))))
+
+(define (env-ref env id)
+  (binding-exists? env id))
+
+(define (env-local-push! env id)
+  (let ((bindings (env-bindings env)))
+    (cond
+     (bindings (queue-in! bindings id))
+     (else
+      (throw 'pi-error env-local-push! "Invalid local var `~a'!" (id-name id))))))
 
 (define (env->args env)
   (hash-map->list (lambda (k _) k) (env-bindings env)))

@@ -49,6 +49,7 @@
      fold-branch
      dead-variable-elimination
      elre
+     eta-function
      closure-conversion
      lambda-lifting))
   (display "optimize\n")

@@ -25,7 +25,9 @@
 ;; Eliminate all anonymouse functions
 (define (eta-func expr)
   (match expr
-    (($ letfun/k ($ cps _ f ($ lambda/k _ args ($ app/k _ g _)) body))
+    (($ letfun/k ($ bind-special-form/k _
+                    f ($ lambda/k _ args ($ app/k _ g _)) body))
+     (pk "hit!!!!!!!!!!!!!!")
      (cfs body g f))
     (($ seq/k _ exprs)
      (seq/k-exprs-set! expr (map eta-func exprs))
