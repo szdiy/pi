@@ -72,22 +72,19 @@
                     (cc b1)
                     (cc b2)))
     (($ collection/k ($ cps _ kont name attr) var type size value)
+     (env-local-push! (current-env) var)
      (make-collection/k (list kont name attr)
                         var type size
                         (cc value)))
     (($ seq/k ($ cps _ kont name attr) exprs)
      (make-seq/k (list kont name attr) (map cc exprs)))
     (($ letfun/k ($ bind-special-form/k ($ cps _ kont name attr) fname func body))
-     (let ((env (new-env (list fname))))
-       ;; TODO: convert special binding to closure application
-       (extend-env! (current-env) env)
-       (closure-set! name env)
-       (parameterize ((current-env env)
-                      (current-kont kont))
-         (make-letfun/k (list kont name attr)
-                        fname
-                        (cc func)
-                        (cc body)))))
+     (pk "letfun" (id-name fname))
+     (env-local-push! (current-env) fname)
+     (make-letfun/k (list kont name attr)
+                    fname
+                    (cc func)
+                    (cc body)))
     (($ letcont/k ($ bind-special-form/k ($ cps _ kont name attr) jname jcont body))
      (let ((env (new-env (list jname))))
        (extend-env! (current-env) env)
@@ -99,6 +96,7 @@
                          (cc jcont)
                          (cc body)))))
     (($ letval/k ($ bind-special-form/k ($ cps _ kont name attr) var value body))
+     (env-local-push! (current-env) var)
      (make-letval/k (list kont name attr)
                     var
                     (cc value)

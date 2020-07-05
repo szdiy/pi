@@ -14,35 +14,40 @@
 ;;  You should have received a copy of the GNU General Public License
 ;;  along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-(define-module (pi pass elre)
+(define-module (pi pass eta-func)
   #:use-module (pi cps)
+  #:use-module (pi types)
   #:use-module (pi pass)
+  #:use-module (pi primitives)
+  #:use-module (pi pass normalize)
   #:use-module (ice-9 match))
 
-;; Eliminate all the redundant code:
-;; 1. (begin (begin body ...)) -> (begin body ...)
-(define (elre expr)
+;; Eliminate all anonymouse functions
+(define (eta-func expr)
   (match expr
-    (($ seq/k _ (($ seq/k _ _)))
-     ;; Of course we can make sure no redundant seq was introduced in the parser,
-     ;; however, you have to consider if users do it in their code, such like:
-     ;; (let ((...)) (begin body ...))
-     (elre (car (seq/k-exprs expr))))
+    (($ letfun/k ($ cps _ f ($ lambda/k _ args ($ app/k _ g _)) body))
+     (cfs body g f))
+    (($ seq/k _ exprs)
+     (seq/k-exprs-set! expr (map eta-func exprs))
+     expr)
     ((? bind-special-form/k?)
-     (bind-special-form/k-value-set! expr (elre (bind-special-form/k-value expr)))
-     (bind-special-form/k-body-set! expr (elre (bind-special-form/k-body expr)))
+     (bind-special-form/k-value-set!
+      expr
+      (eta-func (bind-special-form/k-value expr)))
+     (bind-special-form/k-body-set!
+      expr
+      (eta-func (bind-special-form/k-body expr)))
      expr)
     (($ app/k _ func args)
-     (app/k-args-set! expr (map elre args))
+     (app/k-args-set! expr (map eta-func args))
      expr)
     (($ lambda/k _ _ body)
-     (lambda/k-body-set! expr (elre body))
+     (lambda/k-body-set! expr (eta-func body))
      expr)
     (($ branch/k _ cnd b1 b2)
-     (branch/k-cnd-set! expr (elre cnd))
-     (branch/k-tbranch-set! expr (elre b1))
-     (branch/k-fbranch-set! expr (elre b2))
-     expr)
+     (branch/k-cnd-set! expr (eta-func cnd))
+     (branch/k-tbranch-set! expr (eta-func b1))
+     (branch/k-fbranch-set! expr (eta-func b2)))
     (else expr)))
 
-(define-pass eliminate-redundant expr (elre expr))
+(define-pass eta-function expr (eta-func expr))

@@ -20,7 +20,8 @@
   #:use-module (pi pass)
   #:use-module (ice-9 match)
   #:use-module (srfi srfi-1)
-  #:export (normalize/preserving
+  #:export (cfs
+            normalize/preserving
             beta-reduction/preserving))
 
 ;; NOTE: After normalize, there's no ((lambda ...) args), all the applications will

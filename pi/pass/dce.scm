@@ -16,13 +16,21 @@
 
 (define-module (pi pass dce)
   #:use-module (pi env)
+  #:use-module (pi types)
   #:use-module (pi cps)
   #:use-module (pi pass)
+  #:use-module (srfi srfi-1)
   #:use-module (ice-9 match))
 
 ;; FIXME: We don't have to compute free-vars redundantly
 (define (is-referenced? expr v)
-  (memq v (free-vars expr)))
+  (let ((free (free-vars expr)))
+    (match v
+      ((? id?)
+       (any (lambda (x) (id-eq? x v)) free))
+      ((? id-list? v)
+       (insec free v))
+      (else (throw 'pi-error is-referenced? "BUG: Invalid pattern `~a'!" v)))))
 
 (define (dve expr)
   (match expr
@@ -40,6 +48,8 @@
        (bind-special-form/k-body-set! sf (dve (bind-special-form/k-body sf)))
        expr)
       (else (dve (bind-special-form/k-body sf)))))
+    (($ seq/k ($ cps _ kont name attr) exprs)
+     (seq/k-exprs-set! expr (map dve exprs)))
     (($ app/k _ ($ lambda/k _ v body) e)
      ;; TODO: Here we just keep the variable which is referenced in the body,
      ;;       however, it is possible to further optimize the body so that the
@@ -50,13 +60,25 @@
        (lambda/k-body-set! (app/k-func expr) (dve body))
        (app/k-args-set! expr (map dve e))
        expr)
-      (else (dve body))))
+      (else
+       ;; There could be side-effects, so the args should never be dropped.
+       (seq/k-exprs-set! expr `(,@e ,@(seq/k-exprs body)))
+       (dve expr))))
     (($ lambda/k _ v body)
      (cond
       ((is-referenced? body v)
-       (lambda/k-body-set! expr (dve body))
-       expr)
-      (else (dve body))))
+       => (lambda (vv)
+            ;; There could be side-effects, so we only drop the parameters
+            (lambda/k-args-set! expr vv))))
+     (lambda/k-body-set! expr (dve body))
+     expr)
+    (($ branch/k _ cnd b1 b2)
+     (branch/k-cnd-set! expr (dve cnd))
+     (branch/k-tbranch-set! expr (dve b1))
+     (branch/k-fbranch-set! expr (dve b2)))
+    (($ seq/k _ exprs)
+     (seq/k-exprs-set! expr (map dve exprs))
+     expr)
     (else expr)))
 
 ;; This includes dead-continuation and dead-variable elimination
