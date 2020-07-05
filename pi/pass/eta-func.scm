@@ -22,6 +22,11 @@
   #:use-module (pi pass normalize)
   #:use-module (ice-9 match))
 
+;; TODO:
+;; eta-func and eta-cont, it's ok for normal-order to inline directly, but how about
+;; applicative-order?
+
+
 ;; Eliminate all anonymouse functions
 (define (eta-func expr)
   (match expr
