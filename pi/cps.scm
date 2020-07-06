@@ -84,7 +84,6 @@
             make-app/k new-app/k
 
             cont-apply
-            lambda-desugar
 
             union diff insec
             free-vars names bound-vars all-ref-vars
@@ -231,37 +230,34 @@
 (define (cont-apply f e)
   (make-app/k (list prim:halt (new-id "#kont-") (new-id "#k-")) f e))
 
-(define (lambda-desugar cps)
-  (match cps
-    ((? bind-special-form/k? bsf)
-     (make-lambda/k (list (cps-kont bsf) (cps-name bsf) (cps-attr bsf))
-                    (list (bind-special-form/k-var bsf))
-                    (bind-special-form/k-value bsf)))
-    (else cps)))
-
 (define (vars-fold rec acc op expr)
-  (let ((expr (lambda-desugar expr)))
-    (match expr
-      ((? id? id) (list id))
-      #;
-      ((? assign? expr) ; all-subx-fv + assigned-var
-      ;; NOTE: it's reasonable to union assigned var, since there could be
-      ;;       self assigment, say, n=n+1. For such situation, the fv is
-      ;;       U{n,n} = n.
-      (union (proc (ast-subx ast))
-      (proc (assign-var ast))))
-      #;
-      (($ define/k _ f body)            ;
-      (op (rec body) (list f)))
-      (($ lambda/k _ args body)
-       (op (rec body) args))
-      (($ branch/k _ cnd b1 b2)
-       (apply acc (map rec (list cnd b1 b2))))
-      (($ seq/k _ exprs)
-       (apply acc (map rec exprs)))
-      (($ app/k _ f args)
-       (apply acc (map rec args)))
-      (else '()))))
+  (match expr
+    ((? id? id) (list id))
+    ((? primitive? p) (list p))
+    #;
+    ((? assign? expr) ; all-subx-fv + assigned-var
+    ;; NOTE: it's reasonable to union assigned var, since there could be
+    ;;       self assigment, say, n=n+1. For such situation, the fv is
+    ;;       U{n,n} = n.
+    (union (proc (ast-subx ast))
+    (proc (assign-var ast))))
+    #;
+    (($ define/k _ f body)            ;
+    (op (rec body) (list f)))
+    (($ lambda/k _ args body)
+     (op (rec body) args))
+    (($ branch/k _ cnd b1 b2)
+     (apply acc (map rec (list cnd b1 b2))))
+    (($ seq/k _ exprs)
+     (apply acc (map rec exprs)))
+    (($ app/k _ f args)
+     (apply acc (map rec `(,f ,@args))))
+    ((? bind-special-form/k?)
+     (let ((var (bind-special-form/k-var expr))
+           (value (bind-special-form/k-value expr))
+           (body (bind-special-form/k-body expr)))
+       (apply acc (map rec (list var value body)))))
+    (else '())))
 
 (define (union . args) (apply lset-union id-eq? args))
 (define (diff . args) (apply lset-difference id-eq? args))
@@ -354,13 +350,15 @@
                                                #:name fk #:kont cont)
                                  params nv)))
        (new-letfun/k fname fun (new-app/k cont fname #:kont cont) #:kont cont)))
-    (($ binding ($ ast _ body) var val)
+    (($ binding ($ ast _ body) ($ ref _ var) val)
      (let* ((jname (new-id "#jcont-"))
+            (ov (new-id var #f))
             (nv (new-id var))
             (fk (new-id "#letcont/k-"))
-            (jcont (alpha-renaming
-                    (new-lambda/k (list nv) (comp-cps body cont) #:kont cont)
-                    (list var) (list nv))))
+            (jcont (new-lambda/k
+                    `(,fk ,@nv)
+                    (alpha-renaming (ast->cps body cont) (list var) (list nv))
+                    #:kont cont)))
        (new-letcont/k jname jcont
                       (alpha-renaming (ast->cps val jname) (list var) (list nv))
                       #:kont cont)))
@@ -394,9 +392,10 @@
      (let* ((fname (new-id "#func-"))
             (fk (new-id "#kont-"))
             (nv (map new-id (pk "params" params)))
-            (fun (alpha-renaming
-                  (new-lambda/k nv (ast->cps body fk) #:name fk)
-                  params nv)))
+            (fun (new-lambda/k
+                  `(,fk ,@nv)
+                  (alpha-renaming (ast->cps body cont) (list var) (list nv))
+                  #:kont cont)))
        (new-letfun/k fname fun (new-app/k cont fname) #:kont cont)))
     (($ def ($ ast _ body) var)
      ;; NOTE: The local function definition should be converted to let-binding
@@ -411,7 +410,7 @@
             (fk (new-id "#letcont/k-"))
             (jcont (new-lambda/k
                     (list nv)
-                    (alpha-renaming (ast->cps body cont) (list ov) (list nv))
+                    (alpha-renaming (ast->cps body cont) (list var) (list nv))
                     #:kont cont)))
        (new-letcont/k jname jcont
                       (alpha-renaming (ast->cps value jname) (list ov) (list nv))

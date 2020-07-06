@@ -40,15 +40,16 @@
     (run-pass
      cexpr
      normalize
-     function-inline
      dead-function-elimination
      fold-constant
      (constant-propagation 2)
      useless-cont
      delta-reduction
      fold-branch
+     function-inline
      dead-variable-elimination
      elre
+     eta-cont
      eta-function
      closure-conversion
      lambda-lifting))

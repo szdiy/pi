@@ -18,6 +18,7 @@
   #:use-module (pi cps)
   #:use-module (pi types)
   #:use-module (pi pass)
+  #:use-module (pi primitives)
   #:use-module (ice-9 match)
   #:use-module (srfi srfi-1)
   #:export (cfs
@@ -63,12 +64,12 @@
 (define (cfs expr args el)
   (define (substitute e)
     (cond
-     ((list-index (lambda (x) (id-eq? x e)) args)
+     ((list-index (lambda (x) (node-eq? x e)) args)
       => (lambda (i) (list-ref el i)))
      (else e)))
   (when (not (= (length args) (length el)))
     (throw 'pi-error cfs
-           (format #f "BUG: expr: ~a, args: ~a, el: ~a~%" expr args el)))
+           "BUG: expr: ~a, args: ~a, el: ~a~%" expr args (map cps->expr el)))
   (match expr
     (($ lambda/k ($ cps _ kont name attr) fargs body)
      ;;(format #t "cfs 0 ~a~%" expr)
@@ -89,6 +90,8 @@
      (bind-special-form/k-body-set!
       expr (cfs (bind-special-form/k-body expr) args el))
      expr)
+    (($ primitive?)
+     (substitute expr))
     (($ id _ name _)
      (substitute expr))
     (else expr)))
@@ -160,7 +163,8 @@
 
 (define (eta-reduction expr)
   (match expr
-    (($ lambda/k _ arg ($ app/k _ f (? (lambda (a) (id-eq? a arg)))))
+    ;; FIXME: deal with args
+    (($ lambda/k _ arg ($ app/k _ f ((? (lambda (a) (id-eq? a arg))))))
      ;;(display "eta-0\n")
      (eta-reduction f))
     (($ branch/k _ cnd b1 b2)

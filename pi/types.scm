@@ -45,6 +45,7 @@
             new-id
             id-eq?
             id-list?
+            node-eq?
             id->string
 
             lvar lvar?
@@ -167,6 +168,10 @@
 
 (define (id-list? lst)
   (make-object-list-pred lst id?))
+
+(define (node-eq? x y)
+  (or (id-eq? x y)
+      (equal? x y)))
 
 ;; local variable
 (define-typed-record lvar (parent id)

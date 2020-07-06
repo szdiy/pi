@@ -28,19 +28,15 @@
     (match v
       ((? id?)
        (any (lambda (x) (id-eq? x v)) free))
-      ((? id-list? v)
-       (insec free v))
+      ((? id-list?)
+       (let ((ret (insec free v)))
+         (if (null? ret)
+             #f
+             ret)))
       (else (throw 'pi-error is-referenced? "BUG: Invalid pattern `~a'!" v)))))
 
 (define (dve expr)
   (match expr
-    (($ letcont/k ($ bind-special-form/k _ cv ($ lambda/k _ v body) cont-body))
-     (cond
-      ((is-referenced? body v)
-       (bind-special-form/k-value-set! expr (dve (bind-special-form/k-value expr)))
-       (bind-special-form/k-body-set! expr (dve cont-body))
-       expr)
-      (else (dve body))))
     ((? bind-special-form/k? sf)
      (cond
       ((is-referenced? (bind-special-form/k-body sf) (bind-special-form/k-var sf))
@@ -68,8 +64,9 @@
      (cond
       ((is-referenced? body v)
        => (lambda (vv)
+            (pk "v" (map id-name v))
             ;; There could be side-effects, so we only drop the parameters
-            (lambda/k-args-set! expr vv))))
+            (lambda/k-args-set! expr (pk "vv" (map id-name vv) vv)))))
      (lambda/k-body-set! expr (dve body))
      expr)
     (($ branch/k _ cnd b1 b2)

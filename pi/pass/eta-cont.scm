@@ -14,49 +14,39 @@
 ;;  You should have received a copy of the GNU General Public License
 ;;  along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-(define-module (pi pass eta-func)
+(define-module (pi pass eta-cont)
   #:use-module (pi cps)
-  #:use-module (pi types)
   #:use-module (pi pass)
-  #:use-module (pi primitives)
   #:use-module (pi pass normalize)
   #:use-module (ice-9 match))
 
-;; TODO:
-;; eta-func and eta-cont, it's ok for normal-order to inline directly, but how about
-;; applicative-order?
-
-
-;; Eliminate all anonymouse functions
-(define (ef expr)
+(define (ec expr)
   (match expr
-    (($ letfun/k ($ bind-special-form/k _
-                    f ($ lambda/k _ args ($ app/k _ g _)) body))
-     (pk "hit!!!!!!!!!!!!!!")
-     (pk "g" (primitive-name g))
-     (pk "f" (id-name f))
-     (cfs body (list g) (list f)))
-    (($ seq/k _ exprs)
-     (seq/k-exprs-set! expr (map ef exprs))
-     expr)
+    (($ letcont/k ($ bind-special-form/k _
+                     j ($ app/k _ g args) body))
+     (ec (cfs body (list j) (list g))))
     ((? bind-special-form/k?)
      (bind-special-form/k-value-set!
       expr
-      (ef (bind-special-form/k-value expr)))
+      (ec (bind-special-form/k-value expr)))
      (bind-special-form/k-body-set!
       expr
-      (ef (bind-special-form/k-body expr)))
+      (ec (bind-special-form/k-body expr)))
+     expr)
+    (($ seq/k _ exprs)
+     (seq/k-exprs-set! expr (map ec exprs))
      expr)
     (($ app/k _ func args)
-     (app/k-args-set! expr (map ef args))
+     (app/k-args-set! expr (map ec args))
      expr)
     (($ lambda/k _ _ body)
-     (lambda/k-body-set! expr (ef body))
+     (lambda/k-body-set! expr (ec body))
      expr)
     (($ branch/k _ cnd b1 b2)
-     (branch/k-cnd-set! expr (ef cnd))
-     (branch/k-tbranch-set! expr (ef b1))
-     (branch/k-fbranch-set! expr (ef b2)))
+     (branch/k-cnd-set! expr (ec cnd))
+     (branch/k-tbranch-set! expr (ec b1))
+     (branch/k-fbranch-set! expr (ec b2))
+     expr)
     (else expr)))
 
-(define-pass eta-function expr (ef expr))
+(define-pass eta-cont expr (ec expr))
