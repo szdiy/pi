@@ -44,13 +44,13 @@
      fold-constant
      (constant-propagation 2)
      useless-cont
-     delta-reduction
      fold-branch
      function-inline
      dead-variable-elimination
      elre
      eta-cont
      eta-function
+     delta-reduction
      closure-conversion
      lambda-lifting))
   (display "optimize\n")

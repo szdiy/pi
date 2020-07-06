@@ -49,14 +49,15 @@
 (define* (func-inline expr #:optional (refs (make-ref-table expr)))
   (define (inlineable-local-func? f) (= 2 (hash-ref refs f 0)))
   (match expr
-    (($ letcont/k ($ bind-special-form/k _ _ jcont
-                     ($ letfun/k ($ bind-special-form/k _ fname fbody _))))
+    (($ letcont/k ($ bind-special-form/k _ jname jcont
+                     ($ letfun/k ($ bind-special-form/k _ fname fbody body))))
      (=> fail!)
      (cond
       ((inlineable-local-func? fname)
-       (pretty-print (cps->expr jcont))
        (beta-reduction/preserving
-        (new-app/k (func-inline jcont refs) (func-inline fbody refs))))
+        (cfs body
+             (list jname fname)
+             (list (func-inline jcont) (func-inline fbody)))))
       (else (fail!))))
     (($ app/k _ ($ lambda/k _ v body) e)
      (cond
@@ -71,6 +72,10 @@
       (else
        (lambda/k-body-set! (app/k-func expr) (func-inline body refs))
        expr)))
+    (($ app/k _ f args)
+     (app/k-func-set! expr (func-inline f))
+     (app/k-args-set! expr (map func-inline args))
+     expr)
     ((? bind-special-form/k?)
      (bind-special-form/k-value-set!
       expr

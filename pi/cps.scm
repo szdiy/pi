@@ -306,7 +306,7 @@
 (define (alpha-renaming expr old new)
   (define (rename eid)
     (cond
-     ((list-index (lambda (sym) (eq? sym (id-name eid))) old)
+     ((list-index (lambda (sym) (eq? (pk "old" sym) (pk "new"(id-name eid)))) old)
       => (lambda (i) (list-ref new i)))
      (else eid)))
   (match expr
@@ -346,9 +346,9 @@
      (let* ((fname (new-id "#func-"))
             (fk (new-id "#kont-"))
             (nv (map new-id params))
-            (fun (alpha-renaming (new-lambda/k params (ast->cps body fk)
-                                               #:name fk #:kont cont)
-                                 params nv)))
+            (fun (new-lambda/k `(,fk ,@nv)
+                               (alpha-renaming (ast->cps body fk) params nv)
+                               #:name fk #:kont cont)))
        (new-letfun/k fname fun (new-app/k cont fname #:kont cont) #:kont cont)))
     (($ binding ($ ast _ body) ($ ref _ var) val)
      (let* ((jname (new-id "#jcont-"))
@@ -356,7 +356,7 @@
             (nv (new-id var))
             (fk (new-id "#letcont/k-"))
             (jcont (new-lambda/k
-                    `(,fk ,@nv)
+                    (list nv)
                     (alpha-renaming (ast->cps body cont) (list var) (list nv))
                     #:kont cont)))
        (new-letcont/k jname jcont
@@ -391,11 +391,10 @@
     (($ closure ($ ast _ body) params _ _)
      (let* ((fname (new-id "#func-"))
             (fk (new-id "#kont-"))
-            (nv (map new-id (pk "params" params)))
-            (fun (new-lambda/k
-                  `(,fk ,@nv)
-                  (alpha-renaming (ast->cps body cont) (list var) (list nv))
-                  #:kont cont)))
+            (nv (map new-id params))
+            (fun (new-lambda/k `(,fk ,@nv)
+                               (alpha-renaming (ast->cps body fk) params nv)
+                               #:name fk #:kont cont)))
        (new-letfun/k fname fun (new-app/k cont fname) #:kont cont)))
     (($ def ($ ast _ body) var)
      ;; NOTE: The local function definition should be converted to let-binding
