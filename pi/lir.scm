@@ -45,6 +45,11 @@
             insr-prim make-insr-prim
             insr-prim-op insr-prim-args
 
+            insr-pcall make-insr-pcall
+            insr-pcall-op
+            insr-pcall-num
+            insr-pcall-nargs
+
             insr-call make-insr-call
             insr-call-label insr-call-args
 
@@ -251,7 +256,7 @@
        (make-insr-label
         '()
         label
-        `(,f ,@e))))
+        `(,@e ,f))))
     (($ constant/k _ value)
      (create-object value))
     (($ lvar _ offset)
@@ -262,7 +267,7 @@
      (let ((v (top-level-ref name)))
        (when (not v)
          (throw 'pi-error cps->lir "Invalid global var `~a'!" name))
-       (cps->lir (pk "v" v))))
+       (cps->lir v)))
     ((? primitive? p)
      (make-insr-prim '() p (primitive->number p)))
     (else (throw 'pi-error cps->lir "Invalid cps `~a'!" (id-name expr)))))

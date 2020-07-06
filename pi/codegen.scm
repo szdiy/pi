@@ -25,6 +25,7 @@
   #:use-module (ice-9 match)
   #:use-module (ice-9 format)
   #:export (codegen
+            lir->sasm-string
             lir->sasm))
 
 (define (gen-binding-frame env)
@@ -39,17 +40,18 @@
 (define (emit-sasm lir)
   (match lir
     (($ insr-proc _ label _ _ body)
-     `((label ,label)
-       ,@(emit-sasm body)))
+     (sasm-label-begin label)
+     (emit-sasm body)
+     (sasm-label-end label))
     (($ insr-call _ label argc)
      (emit-call-proc argc label))
     (($ insr-pcall _ label argc)
-     (emit-call- argc label))
+     (emit-prim-call argc label))
     (($ integer-object _ i)
      ;; TODO: how to associate the variable?
      (emit-integer-object i))
     (($ insr-prim _ p num)
-     (emit-prim num))
+     (emit-prim p num))
     (($ insr-label _ label insrs)
      (sasm-label-begin label)
      (for-each emit-sasm insrs)
@@ -58,11 +60,33 @@
      (emit-fjump label))
     (else (throw 'pi-error emit-sasm "Invalid lir `~a'!" lir))))
 
-(define (codegen lir filename)
+(define (emit-sasm-memory lir)
+  (sasm-nop))
+
+(define (emit-sasm-clean lir)
+  (sasm-nop))
+
+(define (gen-sasm lir)
+  (sasm-memory-begin)
+  (emit-sasm-memory lir)
+  (sasm-memory-end)
+
+  (sasm-program-begin)
   (emit-sasm lir)
+  (sasm-program-end)
+
+  (sasm-clean-begin)
+  (emit-sasm-clean lir)
+  (sasm-clean-end))
+
+(define (codegen lir filename)
+  (gen-sasm lir)
   (call-with-output-file filename sasm-output))
 
 ;; debug helper function
+(define (lir->sasm-string lir)
+  (gen-sasm lir)
+  (call-with-output-string sasm-output))
+
 (define (lir->sasm lir)
-  (emit-sasm lir)
-  (call-with-input-string (call-with-output-string sasm-output) read))
+  (call-with-input-string (lir->sasm-string lir) read))

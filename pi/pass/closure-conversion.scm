@@ -108,10 +108,7 @@
     ((? id? id)
      (let ((env (current-env))
            (label (cps-name (current-kont)))
-           (name (pk "cc name"(id-name id))))
-       (pk "id" (id-name id))
-       (pk "label" label)
-       (pk "bindings" (map id-name (car (env-bindings env))))
+           (name (id-name id)))
        (cond
         ((not (toplevel? env))
          (cond
@@ -124,6 +121,6 @@
           (else (throw 'pi-error cc "Undefined local variable `~a'!" name))))
         ((top-level-ref name)  (new-gvar id))
         (else (throw 'pi-error cc "Undefined global variable `~a'!" name)))))
-    (else (pk "no match-----------------" expr))))
+    (else expr)))
 
 (define-pass closure-conversion expr (cc expr))

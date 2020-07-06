@@ -36,7 +36,7 @@
                  (match item
                    ((name (? integer? cnt))
                     (=> fail!)
-                    (format #t "PASS 0: ~a~%" name)
+                    ;;(format #t "PASS 0: ~a~%" name)
                     (cond
                      ((get-pass name)
                       => (lambda (pass)
@@ -44,14 +44,14 @@
                      (else (fail!))))
                    (name
                     (=> fail!)
-                    (format #t "PASS 1: ~a~%" item)
+                    ;;(format #t "PASS 1: ~a~%" item)
                     (cond
                      ((get-pass name)
                       => (lambda (pass)
                            (pass last)))
                      (else (fail!))))
                    (else (throw 'pi-error 'run-pass "Invalid pass: `~a'!" 'item)))))
-            (pk "item"(object->string item))
-            (pretty-print (cps->expr e))
+            ;;(pk "item"(object->string item))
+            ;;(pretty-print (cps->expr e))
             e))
         expr (list 'lst ...)))

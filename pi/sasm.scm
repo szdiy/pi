@@ -23,66 +23,72 @@
   #:use-module (ice-9 format)
   #:export (sasm-emit
             get-all-sasm
-            sasm-output
-
-            sasm-true
-            sasm-false))
+            sasm-output))
 
 (define *sasm-queue* (new-queue))
 (define (get-all-sasm) (queue-slots *sasm-queue*))
-(define (sasm-output)
+
+(define (sasm-output port)
+  (define level 1)
   (define* (indent-spaces #:optional (mode 'stay))
-    (define level 0)
     (define (gen-spaces)
       (fold (lambda (x p) (string-append " " p)) "" (iota level)))
     (match mode
       ('stay (gen-spaces))
       ('in (set! level (1+ level)))
       ('out (set! level (1- level)))))
-  (format #t "(lef~%")
+  (format port "(lef~%")
+  (indent-spaces 'in)
   (for-each
    (lambda (pattern)
      (match pattern
-       ((insr . descp)
-        (format #t "~a~a ; ~a~%" (indent-spaces) insr descp))
        (('label-begin label)
         (indent-spaces 'in)
-        (format #t "~a(~a ; Label ~a begin~%" (indent-spaces) label label))
+        (format port "~a((label ~a) ; Label ~a begin~%" (indent-spaces)
+                label label)
+        (indent-spaces 'in))
        (('label-end label)
-        (format #t "~a)~a ; Label ~a end~%" (indent-spaces) label label)
+        (format port "~a) ; Label ~a end~%" (indent-spaces) label)
         (indent-spaces 'out))
        ('prog-begin
-        (format #t "(program~%")
+        (format port "~a(program~%" (indent-spaces))
         (indent-spaces 'in))
        ('prog-end
-        (format #t "~a) ; Program end~%" (indent-spaces))
+        (indent-spaces 'out)
+        (format port "~a) ; Program end~%~%" (indent-spaces))
         (indent-spaces 'out))
        ('memory-begin
-        (format #t "(memory~%")
+        (format port "~a(memory~%" (indent-spaces))
         (indent-spaces 'in))
        ('memory-end
-        (format #t "~a) ; Memory end~%" (indent-spaces))
+        (format port "~a) ; Memory end~%~%" (indent-spaces))
         (indent-spaces 'out))
        ('clean-begin
-        (format #t "(clean~%")
+        (format port "~a(clean~%" (indent-spaces))
         (indent-spaces 'in))
        ('clean-end
-        (format #t "~a) ; Clean end~%" (indent-spaces))
+        (format port "~a) ; Clean end~%~%" (indent-spaces))
         (indent-spaces 'out))
        (('closure-prelude argc)
-        (format #t "~a) ; Clean end~%" (indent-spaces))
+        (format port "~a) ; Closure ~a~%" (indent-spaces) argc)
         (indent-spaces 'out))
+       ((insr . descp)
+        (format port "~a~a ; ~a~%" (indent-spaces) insr descp))
+       (() #t)
        (else (throw 'pi-error 'sasm-output "Invalid pattern `~a'!" pattern))))
    (get-all-sasm))
-  (format #t ") ; End LEF~%"))
+  (format port ") ; End LEF~%"))
 
 (define (sasm-emit expr) (queue-in! *sasm-queue* expr))
+
+(define-public (sasm-nop)
+  (sasm-emit '()))
 
 (define-public (sasm-true)
   (sasm-emit
    '((push-4bit-const 1) . "Boolean true")))
 
-(define-public (sasm-true)
+(define-public (sasm-false)
   (sasm-emit
    '((push-4bit-const 0) . "Boolean false")))
 
@@ -102,7 +108,7 @@
 (define-public (emit-char c)
   (if (char? c)
       (sasm-emit
-       `((push-4bit-const ,(char->integer c)) . (format #f "Char `~a'" c)))
+       `((push-4bit-const ,(char->integer c)) . ,(format #f "Char `~a'" c)))
       (throw 'pi-error "Invalid char value!" c)))
 
 (define-public (emit-integer i)
@@ -122,34 +128,38 @@
 
 (define-public (emit-prim-call argc p)
   (sasm-emit `((prim-call ,argc ,(primitive->number p))
-               . (format #f "Call primitive `~a'" (primitive-name p)))))
+               . ,(format #f "Call primitive `~a'" (primitive-name p)))))
+
+(define-public (emit-prim p num)
+  (sasm-emit `((primitive ,num)
+               . ,(format #f "Call primitive `~a'" (primitive-name p)))))
 
 (define-public (emit-fjump label)
   (sasm-emit `((fjump ,label) . "")))
 
 (define-public (sasm-program-begin)
-  (sasm-emit 'prog-start))
+  (sasm-emit 'prog-begin))
 
 (define-public (sasm-program-end)
   (sasm-emit 'prog-end))
 
 (define-public (sasm-memory-begin)
-  (sasm-emit 'memory-start))
+  (sasm-emit 'memory-begin))
 
-(define-public (sasm-memory-begin)
-  (sasm-emit 'memory-start))
-
-(define-public (sasm-clean-begin)
-  (sasm-emit 'clean-start))
+(define-public (sasm-memory-end)
+  (sasm-emit 'memory-end))
 
 (define-public (sasm-clean-begin)
-  (sasm-emit 'clean-start))
+  (sasm-emit 'clean-begin))
+
+(define-public (sasm-clean-end)
+  (sasm-emit 'clean-end))
 
 (define-public (sasm-label-begin label)
-  (sasm-emit '(label-start ,label)))
+  (sasm-emit `(label-begin ,label)))
 
 (define-public (sasm-label-end label)
   (sasm-emit `(label-end ,label)))
 
 (define-public (sasm-closure-prelude argc)
-  (sasm-emit '((pop-16bit-const ,argc) . (format #f "Pop ~a args" argc))))
+  (sasm-emit '((pop-16bit-const ,argc) . ,(format #f "Pop ~a args" argc))))

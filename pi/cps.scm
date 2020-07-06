@@ -306,7 +306,7 @@
 (define (alpha-renaming expr old new)
   (define (rename eid)
     (cond
-     ((list-index (lambda (sym) (eq? (pk "old" sym) (pk "new"(id-name eid)))) old)
+     ((list-index (lambda (sym) (eq? sym (id-name eid))) old)
       => (lambda (i) (list-ref new i)))
      (else eid)))
   (match expr
